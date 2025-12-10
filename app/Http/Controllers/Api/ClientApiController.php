@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -287,6 +288,227 @@ class ClientApiController extends Controller
                 'is_active' => $client->isActive(),
                 'is_pending' => $client->isPending(),
                 'is_banned' => $client->isBanned(),
+            ]
+        ], 200);
+    }
+
+    /**
+     * Get client products
+     */
+    public function getProducts(Request $request)
+    {
+        $client = $request->user();
+        $products = $client->products()->orderBy('created_at', 'desc')->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'products' => $products
+            ]
+        ], 200);
+    }
+
+    /**
+     * Get single product
+     */
+    public function getProduct(Request $request, $id)
+    {
+        $client = $request->user();
+        $product = Product::where('client_id', $client->id)->findOrFail($id);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'product' => $product
+            ]
+        ], 200);
+    }
+
+    /**
+     * Store new product
+     */
+    public function storeProduct(Request $request)
+    {
+        $client = $request->user();
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'sku' => 'required|string|unique:products,sku,NULL,id,client_id,' . $client->id,
+            'purchase_price' => 'required|numeric|min:0',
+            'wholesale_price' => 'required|numeric|min:0',
+            'retail_price' => 'required|numeric|min:0',
+            'unit_type' => 'required|in:weight,piece,carton',
+            'weight' => 'required_if:unit_type,weight|nullable|numeric|min:0',
+            'weight_unit' => 'required_if:unit_type,weight|nullable|in:kg,g',
+            'pieces_per_carton' => 'required_if:unit_type,carton|nullable|integer|min:1',
+            'piece_price_in_carton' => 'required_if:unit_type,carton|nullable|numeric|min:0',
+            'total_quantity' => 'required|numeric|min:0',
+            'remaining_quantity' => 'required|numeric|min:0|max:' . $request->total_quantity,
+            'min_quantity' => 'required|numeric|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'خطأ في التحقق من البيانات',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $product = Product::create([
+                'client_id' => $client->id,
+                'name' => $request->name,
+                'sku' => $request->sku,
+                'purchase_price' => $request->purchase_price,
+                'wholesale_price' => $request->wholesale_price,
+                'retail_price' => $request->retail_price,
+                'unit_type' => $request->unit_type,
+                'weight' => $request->unit_type === 'weight' ? $request->weight : null,
+                'weight_unit' => $request->unit_type === 'weight' ? $request->weight_unit : null,
+                'pieces_per_carton' => $request->unit_type === 'carton' ? $request->pieces_per_carton : null,
+                'piece_price_in_carton' => $request->unit_type === 'carton' ? $request->piece_price_in_carton : null,
+                'total_quantity' => $request->total_quantity,
+                'remaining_quantity' => $request->remaining_quantity,
+                'min_quantity' => $request->min_quantity,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم إضافة المنتج بنجاح',
+                'data' => [
+                    'product' => $product
+                ]
+            ], 201);
+        } catch (\Exception $e) {
+            \Log::error('Product creation error: ' . $e->getMessage(), [
+                'client_id' => $client->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء إضافة المنتج. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
+    }
+
+    /**
+     * Update product
+     */
+    public function updateProduct(Request $request, $id)
+    {
+        $client = $request->user();
+        $product = Product::where('client_id', $client->id)->findOrFail($id);
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'sku' => 'required|string|unique:products,sku,' . $id . ',id,client_id,' . $client->id,
+            'purchase_price' => 'required|numeric|min:0',
+            'wholesale_price' => 'required|numeric|min:0',
+            'retail_price' => 'required|numeric|min:0',
+            'unit_type' => 'required|in:weight,piece,carton',
+            'weight' => 'required_if:unit_type,weight|nullable|numeric|min:0',
+            'weight_unit' => 'required_if:unit_type,weight|nullable|in:kg,g',
+            'pieces_per_carton' => 'required_if:unit_type,carton|nullable|integer|min:1',
+            'piece_price_in_carton' => 'required_if:unit_type,carton|nullable|numeric|min:0',
+            'total_quantity' => 'required|numeric|min:0',
+            'remaining_quantity' => 'required|numeric|min:0|max:' . $request->total_quantity,
+            'min_quantity' => 'required|numeric|min:0',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'خطأ في التحقق من البيانات',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $product->update([
+                'name' => $request->name,
+                'sku' => $request->sku,
+                'purchase_price' => $request->purchase_price,
+                'wholesale_price' => $request->wholesale_price,
+                'retail_price' => $request->retail_price,
+                'unit_type' => $request->unit_type,
+                'weight' => $request->unit_type === 'weight' ? $request->weight : null,
+                'weight_unit' => $request->unit_type === 'weight' ? $request->weight_unit : null,
+                'pieces_per_carton' => $request->unit_type === 'carton' ? $request->pieces_per_carton : null,
+                'piece_price_in_carton' => $request->unit_type === 'carton' ? $request->piece_price_in_carton : null,
+                'total_quantity' => $request->total_quantity,
+                'remaining_quantity' => $request->remaining_quantity,
+                'min_quantity' => $request->min_quantity,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تحديث المنتج بنجاح',
+                'data' => [
+                    'product' => $product->fresh()
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Product update error: ' . $e->getMessage(), [
+                'product_id' => $id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء تحديث المنتج. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete product
+     */
+    public function deleteProduct(Request $request, $id)
+    {
+        $client = $request->user();
+        $product = Product::where('client_id', $client->id)->findOrFail($id);
+
+        try {
+            $product->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم حذف المنتج بنجاح'
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Product deletion error: ' . $e->getMessage(), [
+                'product_id' => $id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء حذف المنتج. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
+    }
+
+    /**
+     * Get low stock products
+     */
+    public function getLowStockProducts(Request $request)
+    {
+        $client = $request->user();
+        $products = $client->products()
+            ->where('is_low_stock', true)
+            ->orderBy('remaining_quantity', 'asc')
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'products' => $products,
+                'count' => $products->count()
             ]
         ], 200);
     }

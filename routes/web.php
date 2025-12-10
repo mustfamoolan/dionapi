@@ -33,6 +33,14 @@ Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function ()
     Route::get('/clients/data', [AdminController::class, 'getClients'])->name('clients.data');
     Route::get('/clients/{id}', [AdminController::class, 'getClient'])->name('clients.get');
     Route::put('/clients/{id}/status', [AdminController::class, 'updateClientStatus'])->name('clients.updateStatus');
+
+    // Products routes
+    Route::get('/clients/{id}/products', [AdminController::class, 'clientProducts'])->name('clients.products');
+    Route::get('/clients/{clientId}/products/data', [AdminController::class, 'getClientProducts'])->name('clients.products.data');
+    Route::post('/clients/{clientId}/products', [AdminController::class, 'storeProduct'])->name('clients.products.store');
+    Route::get('/products/{id}', [AdminController::class, 'getProduct'])->name('products.get');
+    Route::put('/products/{id}', [AdminController::class, 'updateProduct'])->name('products.update');
+    Route::delete('/products/{id}', [AdminController::class, 'deleteProduct'])->name('products.delete');
 });
 
 // Template demo routes (keep for template pages)

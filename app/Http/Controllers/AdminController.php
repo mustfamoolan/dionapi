@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Client;
+use App\Models\Product;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
@@ -270,7 +271,7 @@ class AdminController extends Controller
         $client = Client::findOrFail($id);
 
         $oldStatus = $client->status;
-        
+
         switch ($request->status) {
             case 'active':
                 $months = $request->months ?? 1;
@@ -338,7 +339,7 @@ class AdminController extends Controller
         }
 
         $fcmServerKey = env('FCM_SERVER_KEY');
-        
+
         if (!$fcmServerKey) {
             Log::warning('FCM_SERVER_KEY not configured. Cannot send push notification.');
             return;
@@ -406,6 +407,178 @@ class AdminController extends Controller
     public function settings()
     {
         return view('admin.settings');
+    }
+
+    /**
+     * Show client products page
+     */
+    public function clientProducts($clientId)
+    {
+        $client = Client::findOrFail($clientId);
+        $products = $client->products()->orderBy('created_at', 'desc')->get();
+        return view('admin.client-products', compact('client', 'products'));
+    }
+
+    /**
+     * Get client products data for DataTable
+     */
+    public function getClientProducts(Request $request, $clientId)
+    {
+        $products = Product::where('client_id', $clientId)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'data' => $products->map(function ($product) {
+                return [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'purchase_price' => number_format($product->purchase_price, 2),
+                    'wholesale_price' => number_format($product->wholesale_price, 2),
+                    'retail_price' => number_format($product->retail_price, 2),
+                    'unit_type' => $this->getUnitTypeLabel($product->unit_type),
+                    'unit_details' => $product->getFormattedUnit(),
+                    'total_quantity' => number_format($product->total_quantity, 2),
+                    'remaining_quantity' => number_format($product->remaining_quantity, 2),
+                    'min_quantity' => number_format($product->min_quantity, 2),
+                    'is_low_stock' => $product->is_low_stock ? '<span class="badge bg-danger">منخفض</span>' : '<span class="badge bg-success">طبيعي</span>',
+                ];
+            })
+        ]);
+    }
+
+    /**
+     * Store new product
+     */
+    public function storeProduct(Request $request, $clientId)
+    {
+        $client = Client::findOrFail($clientId);
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'sku' => 'required|string|unique:products,sku,NULL,id,client_id,' . $clientId,
+            'purchase_price' => 'required|numeric|min:0',
+            'wholesale_price' => 'required|numeric|min:0',
+            'retail_price' => 'required|numeric|min:0',
+            'unit_type' => 'required|in:weight,piece,carton',
+            'weight' => 'required_if:unit_type,weight|nullable|numeric|min:0',
+            'weight_unit' => 'required_if:unit_type,weight|nullable|in:kg,g',
+            'pieces_per_carton' => 'required_if:unit_type,carton|nullable|integer|min:1',
+            'piece_price_in_carton' => 'required_if:unit_type,carton|nullable|numeric|min:0',
+            'total_quantity' => 'required|numeric|min:0',
+            'remaining_quantity' => 'required|numeric|min:0|max:' . $request->total_quantity,
+            'min_quantity' => 'required|numeric|min:0',
+        ]);
+
+        $product = Product::create([
+            'client_id' => $clientId,
+            'name' => $request->name,
+            'sku' => $request->sku,
+            'purchase_price' => $request->purchase_price,
+            'wholesale_price' => $request->wholesale_price,
+            'retail_price' => $request->retail_price,
+            'unit_type' => $request->unit_type,
+            'weight' => $request->unit_type === 'weight' ? $request->weight : null,
+            'weight_unit' => $request->unit_type === 'weight' ? $request->weight_unit : null,
+            'pieces_per_carton' => $request->unit_type === 'carton' ? $request->pieces_per_carton : null,
+            'piece_price_in_carton' => $request->unit_type === 'carton' ? $request->piece_price_in_carton : null,
+            'total_quantity' => $request->total_quantity,
+            'remaining_quantity' => $request->remaining_quantity,
+            'min_quantity' => $request->min_quantity,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم إضافة المنتج بنجاح',
+            'product' => $product
+        ]);
+    }
+
+    /**
+     * Update product
+     */
+    public function updateProduct(Request $request, $id)
+    {
+        $product = Product::findOrFail($id);
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'sku' => 'required|string|unique:products,sku,' . $id . ',id,client_id,' . $product->client_id,
+            'purchase_price' => 'required|numeric|min:0',
+            'wholesale_price' => 'required|numeric|min:0',
+            'retail_price' => 'required|numeric|min:0',
+            'unit_type' => 'required|in:weight,piece,carton',
+            'weight' => 'required_if:unit_type,weight|nullable|numeric|min:0',
+            'weight_unit' => 'required_if:unit_type,weight|nullable|in:kg,g',
+            'pieces_per_carton' => 'required_if:unit_type,carton|nullable|integer|min:1',
+            'piece_price_in_carton' => 'required_if:unit_type,carton|nullable|numeric|min:0',
+            'total_quantity' => 'required|numeric|min:0',
+            'remaining_quantity' => 'required|numeric|min:0|max:' . $request->total_quantity,
+            'min_quantity' => 'required|numeric|min:0',
+        ]);
+
+        $product->update([
+            'name' => $request->name,
+            'sku' => $request->sku,
+            'purchase_price' => $request->purchase_price,
+            'wholesale_price' => $request->wholesale_price,
+            'retail_price' => $request->retail_price,
+            'unit_type' => $request->unit_type,
+            'weight' => $request->unit_type === 'weight' ? $request->weight : null,
+            'weight_unit' => $request->unit_type === 'weight' ? $request->weight_unit : null,
+            'pieces_per_carton' => $request->unit_type === 'carton' ? $request->pieces_per_carton : null,
+            'piece_price_in_carton' => $request->unit_type === 'carton' ? $request->piece_price_in_carton : null,
+            'total_quantity' => $request->total_quantity,
+            'remaining_quantity' => $request->remaining_quantity,
+            'min_quantity' => $request->min_quantity,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تحديث المنتج بنجاح',
+            'product' => $product
+        ]);
+    }
+
+    /**
+     * Delete product
+     */
+    public function deleteProduct($id)
+    {
+        $product = Product::findOrFail($id);
+        $product->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم حذف المنتج بنجاح'
+        ]);
+    }
+
+    /**
+     * Get product by ID
+     */
+    public function getProduct($id)
+    {
+        $product = Product::findOrFail($id);
+        return response()->json([
+            'success' => true,
+            'product' => $product
+        ]);
+    }
+
+    /**
+     * Get unit type label
+     */
+    private function getUnitTypeLabel($unitType)
+    {
+        $labels = [
+            'weight' => 'وزن',
+            'piece' => 'قطعة',
+            'carton' => 'كارتون',
+        ];
+
+        return $labels[$unitType] ?? $unitType;
     }
 }
 

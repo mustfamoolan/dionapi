@@ -82,6 +82,9 @@
                             <td>{{ $client->created_at->format('Y-m-d') }}</td>
                             <td>
                                 <div class="hstack gap-2">
+                                    <a href="{{ route('admin.clients.products', $client->id) }}" class="btn btn-sm btn-info" title="المنتجات">
+                                        <i class="ri-shopping-bag-line"></i>
+                                    </a>
                                     @if($client->status != 'active')
                                     <button type="button" class="btn btn-sm btn-success activate-client" data-id="{{ $client->id }}" data-name="{{ $client->name }}" title="تفعيل">
                                         <i class="ri-check-line"></i>

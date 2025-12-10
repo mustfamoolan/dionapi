@@ -25,5 +25,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/clients/status', [ClientApiController::class, 'getStatus']);
     Route::post('/clients/logout', [ClientApiController::class, 'logout']);
     Route::post('/clients/refresh-token', [ClientApiController::class, 'refreshToken']);
+
+    // Products routes
+    Route::get('/clients/products', [ClientApiController::class, 'getProducts']);
+    Route::get('/clients/products/low-stock', [ClientApiController::class, 'getLowStockProducts']);
+    Route::get('/clients/products/{id}', [ClientApiController::class, 'getProduct']);
+    Route::post('/clients/products', [ClientApiController::class, 'storeProduct']);
+    Route::put('/clients/products/{id}', [ClientApiController::class, 'updateProduct']);
+    Route::delete('/clients/products/{id}', [ClientApiController::class, 'deleteProduct']);
 });
 

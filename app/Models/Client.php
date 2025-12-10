@@ -135,4 +135,12 @@ class Client extends Model
             'activation_expires_at' => null,
         ]);
     }
+
+    /**
+     * Get the products for the client.
+     */
+    public function products()
+    {
+        return $this->hasMany(Product::class);
+    }
 }
