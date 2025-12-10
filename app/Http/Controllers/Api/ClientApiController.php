@@ -14,49 +14,75 @@ class ClientApiController extends Controller
      */
     public function register(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        // Clean and prepare data
+        $data = $request->all();
+        
+        // Handle photo_url - accept empty string as null
+        if (isset($data['photo_url']) && empty(trim($data['photo_url']))) {
+            $data['photo_url'] = null;
+        }
+
+        $validator = Validator::make($data, [
             'firebase_uid' => 'required|string|unique:clients,firebase_uid',
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:clients,email',
             'phone' => 'nullable|string|max:20',
-            'photo_url' => 'nullable|url',
+            'photo_url' => 'nullable|url|max:500',
             'provider' => 'required|string|in:google,facebook,apple',
-            'provider_id' => 'nullable|string',
+            'provider_id' => 'nullable|string|max:255',
             'device_token' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
+            \Log::warning('Client registration validation failed', [
+                'errors' => $validator->errors()->toArray(),
+                'request_data' => $data
+            ]);
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Validation error',
+                'message' => 'خطأ في التحقق من البيانات',
                 'errors' => $validator->errors()
             ], 422);
         }
 
-        $client = Client::create([
-            'firebase_uid' => $request->firebase_uid,
-            'name' => $request->name,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'photo_url' => $request->photo_url,
-            'provider' => $request->provider,
-            'provider_id' => $request->provider_id,
-            'device_token' => $request->device_token,
-            'is_active' => true,
-            'last_login_at' => now(),
-        ]);
+        try {
+            $client = Client::create([
+                'firebase_uid' => $data['firebase_uid'],
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'phone' => $data['phone'] ?? null,
+                'photo_url' => $data['photo_url'] ?? null,
+                'provider' => $data['provider'],
+                'provider_id' => $data['provider_id'] ?? null,
+                'device_token' => $data['device_token'] ?? null,
+                'is_active' => true,
+                'last_login_at' => now(),
+            ]);
 
-        $token = $client->createToken('mobile-app')->plainTextToken;
+            $token = $client->createToken('mobile-app')->plainTextToken;
 
-        return response()->json([
-            'success' => true,
-            'message' => 'تم تسجيل العميل بنجاح',
-            'data' => [
-                'client' => $client,
-                'token' => $token,
-                'token_type' => 'Bearer',
-            ]
-        ], 201);
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تسجيل العميل بنجاح',
+                'data' => [
+                    'client' => $client,
+                    'token' => $token,
+                    'token_type' => 'Bearer',
+                ]
+            ], 201);
+        } catch (\Exception $e) {
+            \Log::error('Client registration error: ' . $e->getMessage(), [
+                'request_data' => $data,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء التسجيل. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     /**
@@ -72,46 +98,60 @@ class ClientApiController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Validation error',
+                'message' => 'خطأ في التحقق من البيانات',
                 'errors' => $validator->errors()
             ], 422);
         }
 
-        $client = Client::where('firebase_uid', $request->firebase_uid)->first();
+        try {
+            $client = Client::where('firebase_uid', $request->firebase_uid)->first();
 
-        if (!$client) {
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'العميل غير موجود. يرجى التسجيل أولاً.'
+                ], 404);
+            }
+
+            if (!$client->is_active) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'حسابك غير نشط. يرجى التواصل مع الدعم.'
+                ], 403);
+            }
+
+            // Update device token and last login
+            $updateData = ['last_login_at' => now()];
+            if ($request->has('device_token') && !empty($request->device_token)) {
+                $updateData['device_token'] = $request->device_token;
+            }
+            $client->update($updateData);
+
+            // Revoke all existing tokens and create new one
+            $client->tokens()->delete();
+            $token = $client->createToken('mobile-app')->plainTextToken;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تسجيل الدخول بنجاح',
+                'data' => [
+                    'client' => $client,
+                    'token' => $token,
+                    'token_type' => 'Bearer',
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Client login error: ' . $e->getMessage(), [
+                'firebase_uid' => $request->firebase_uid,
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'العميل غير موجود. يرجى التسجيل أولاً.'
-            ], 404);
+                'message' => 'حدث خطأ أثناء تسجيل الدخول. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
         }
-
-        if (!$client->is_active) {
-            return response()->json([
-                'success' => false,
-                'message' => 'حسابك غير نشط. يرجى التواصل مع الدعم.'
-            ], 403);
-        }
-
-        // Update device token and last login
-        $client->update([
-            'device_token' => $request->device_token ?? $client->device_token,
-            'last_login_at' => now(),
-        ]);
-
-        // Revoke all existing tokens and create new one
-        $client->tokens()->delete();
-        $token = $client->createToken('mobile-app')->plainTextToken;
-
-        return response()->json([
-            'success' => true,
-            'message' => 'تم تسجيل الدخول بنجاح',
-            'data' => [
-                'client' => $client,
-                'token' => $token,
-                'token_type' => 'Bearer',
-            ]
-        ], 200);
     }
 
     /**
@@ -136,10 +176,18 @@ class ClientApiController extends Controller
     {
         $client = $request->user();
 
-        $validator = Validator::make($request->all(), [
+        // Clean and prepare data
+        $data = $request->all();
+        
+        // Handle photo_url - accept empty string as null
+        if (isset($data['photo_url']) && empty(trim($data['photo_url']))) {
+            $data['photo_url'] = null;
+        }
+
+        $validator = Validator::make($data, [
             'name' => 'sometimes|string|max:255',
             'phone' => 'nullable|string|max:20',
-            'photo_url' => 'nullable|url',
+            'photo_url' => 'nullable|url|max:500',
             'device_token' => 'nullable|string',
         ]);
 
@@ -151,7 +199,13 @@ class ClientApiController extends Controller
             ], 422);
         }
 
-        $client->update($request->only(['name', 'phone', 'photo_url', 'device_token']));
+        $updateData = [];
+        if (isset($data['name'])) $updateData['name'] = $data['name'];
+        if (isset($data['phone'])) $updateData['phone'] = $data['phone'];
+        if (isset($data['photo_url'])) $updateData['photo_url'] = $data['photo_url'];
+        if (isset($data['device_token'])) $updateData['device_token'] = $data['device_token'];
+        
+        $client->update($updateData);
 
         return response()->json([
             'success' => true,
