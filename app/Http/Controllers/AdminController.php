@@ -7,6 +7,8 @@ use App\Models\User;
 use App\Models\Client;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class AdminController extends Controller
 {
@@ -267,25 +269,38 @@ class AdminController extends Controller
 
         $client = Client::findOrFail($id);
 
+        $oldStatus = $client->status;
+        
         switch ($request->status) {
             case 'active':
                 $months = $request->months ?? 1;
                 $client->activate($months);
                 $message = "تم تفعيل العميل لمدة {$months} شهر بنجاح";
+                $notificationTitle = 'تم تفعيل حسابك';
+                $notificationBody = "تم تفعيل حسابك بنجاح لمدة {$months} شهر. يمكنك الآن استخدام التطبيق.";
                 break;
             case 'banned':
                 $client->ban();
                 $message = 'تم حظر العميل بنجاح';
+                $notificationTitle = 'تم حظر حسابك';
+                $notificationBody = 'تم حظر حسابك. يرجى التواصل مع الدعم لمزيد من المعلومات.';
                 break;
             case 'pending':
                 $client->setPending();
                 $message = 'تم وضع العميل في قائمة الانتظار بنجاح';
+                $notificationTitle = 'تغيير حالة الحساب';
+                $notificationBody = 'تم وضع حسابك في قائمة الانتظار. يرجى انتظار التفعيل من الإدارة.';
                 break;
             default:
                 return response()->json([
                     'success' => false,
                     'message' => 'حالة غير صحيحة'
                 ], 400);
+        }
+
+        // Send push notification if status changed and device token exists
+        if ($oldStatus !== $client->status && $client->device_token) {
+            $this->sendStatusChangeNotification($client, $notificationTitle, $notificationBody);
         }
 
         return response()->json([
@@ -311,6 +326,64 @@ class AdminController extends Controller
         ];
 
         return $badges[$status] ?? '<span class="badge bg-secondary">' . $status . '</span>';
+    }
+
+    /**
+     * Send push notification to client when status changes
+     */
+    private function sendStatusChangeNotification(Client $client, string $title, string $body)
+    {
+        if (!$client->device_token) {
+            return;
+        }
+
+        $fcmServerKey = env('FCM_SERVER_KEY');
+        
+        if (!$fcmServerKey) {
+            Log::warning('FCM_SERVER_KEY not configured. Cannot send push notification.');
+            return;
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'key=' . $fcmServerKey,
+                'Content-Type' => 'application/json',
+            ])->post('https://fcm.googleapis.com/fcm/send', [
+                'to' => $client->device_token,
+                'notification' => [
+                    'title' => $title,
+                    'body' => $body,
+                    'sound' => 'default',
+                ],
+                'data' => [
+                    'type' => 'status_change',
+                    'status' => $client->status,
+                    'activation_expires_at' => $client->activation_expires_at ? $client->activation_expires_at->toIso8601String() : null,
+                    'is_expired' => $client->isActivationExpired(),
+                    'is_active' => $client->isActive(),
+                    'is_pending' => $client->isPending(),
+                    'is_banned' => $client->isBanned(),
+                ],
+                'priority' => 'high',
+            ]);
+
+            if ($response->successful()) {
+                Log::info('Push notification sent successfully', [
+                    'client_id' => $client->id,
+                    'status' => $client->status,
+                ]);
+            } else {
+                Log::error('Failed to send push notification', [
+                    'client_id' => $client->id,
+                    'response' => $response->body(),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error sending push notification: ' . $e->getMessage(), [
+                'client_id' => $client->id,
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
     }
 
     /**

@@ -188,7 +188,7 @@
                 const btn = e.target.closest('.activate-client');
                 const clientId = btn.dataset.id;
                 const clientName = btn.dataset.name;
-                
+
                 document.getElementById('activate_client_id').value = clientId;
                 document.getElementById('activate_client_name').textContent = `هل تريد تفعيل العميل: ${clientName}؟`;
                 document.getElementById('activation_months').value = 1;
@@ -200,7 +200,7 @@
                 const btn = e.target.closest('.ban-client');
                 const clientId = btn.dataset.id;
                 const clientName = btn.dataset.name;
-                
+
                 document.getElementById('confirm_client_id').value = clientId;
                 document.getElementById('confirm_status').value = 'banned';
                 document.getElementById('confirm_message').textContent = `هل أنت متأكد من حظر العميل: ${clientName}؟`;
@@ -214,7 +214,7 @@
                 const btn = e.target.closest('.pending-client');
                 const clientId = btn.dataset.id;
                 const clientName = btn.dataset.name;
-                
+
                 document.getElementById('confirm_client_id').value = clientId;
                 document.getElementById('confirm_status').value = 'pending';
                 document.getElementById('confirm_message').textContent = `هل تريد وضع العميل: ${clientName} في قائمة الانتظار؟`;
@@ -227,10 +227,10 @@
         // Activate Form Submit
         document.getElementById('activate-client-form').addEventListener('submit', function(e) {
             e.preventDefault();
-            
+
             const clientId = document.getElementById('activate_client_id').value;
             const months = document.getElementById('activation_months').value;
-            
+
             fetch(`/admin/clients/${clientId}/status`, {
                 method: 'PUT',
                 headers: {
@@ -265,10 +265,10 @@
         // Confirm Status Form Submit
         document.getElementById('confirm-status-form').addEventListener('submit', function(e) {
             e.preventDefault();
-            
+
             const clientId = document.getElementById('confirm_client_id').value;
             const status = document.getElementById('confirm_status').value;
-            
+
             fetch(`/admin/clients/${clientId}/status`, {
                 method: 'PUT',
                 headers: {
