@@ -224,7 +224,7 @@
             const unitType = this.value;
             weightFields.style.display = unitType === 'weight' ? 'block' : 'none';
             cartonFields.style.display = unitType === 'carton' ? 'block' : 'none';
-            
+
             // Clear fields when hidden
             if (unitType !== 'weight') {
                 document.getElementById('weight').value = '';
@@ -274,10 +274,10 @@
                             document.getElementById('total_quantity').value = product.total_quantity;
                             document.getElementById('remaining_quantity').value = product.remaining_quantity;
                             document.getElementById('min_quantity').value = product.min_quantity;
-                            
+
                             // Show/hide fields based on unit type
                             unitTypeSelect.dispatchEvent(new Event('change'));
-                            
+
                             if (product.unit_type === 'weight') {
                                 document.getElementById('weight').value = product.weight;
                                 document.getElementById('weight_unit').value = product.weight_unit;
@@ -285,7 +285,7 @@
                                 document.getElementById('pieces_per_carton').value = product.pieces_per_carton;
                                 document.getElementById('piece_price_in_carton').value = product.piece_price_in_carton;
                             }
-                            
+
                             addProductModalLabel.textContent = 'تعديل منتج';
                             methodField.value = 'PUT';
                             productIdField.value = product.id;

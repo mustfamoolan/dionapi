@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\StoreProductRequest;
+use App\Http\Requests\Api\UpdateProductRequest;
 use App\Models\Client;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class ClientApiController extends Controller
 {
@@ -176,14 +179,33 @@ class ClientApiController extends Controller
      */
     public function profile(Request $request)
     {
-        $client = $request->user();
+        try {
+            $client = $request->user();
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'client' => $client
-            ]
-        ], 200);
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود أو غير مصرح له.'
+                ], 401);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'client' => $client
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Get profile error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب بيانات الملف الشخصي. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     /**
@@ -191,46 +213,72 @@ class ClientApiController extends Controller
      */
     public function updateProfile(Request $request)
     {
-        $client = $request->user();
+        try {
+            $client = $request->user();
 
-        // Clean and prepare data
-        $data = $request->all();
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود أو غير مصرح له.'
+                ], 401);
+            }
 
-        // Handle photo_url - accept empty string as null
-        if (isset($data['photo_url']) && empty(trim($data['photo_url']))) {
-            $data['photo_url'] = null;
-        }
+            // Clean and prepare data
+            $data = $request->all();
 
-        $validator = Validator::make($data, [
-            'name' => 'sometimes|string|max:255',
-            'phone' => 'nullable|string|max:20',
-            'photo_url' => 'nullable|url|max:500',
-            'device_token' => 'nullable|string',
-        ]);
+            // Handle photo_url - accept empty string as null
+            if (isset($data['photo_url']) && empty(trim($data['photo_url']))) {
+                $data['photo_url'] = null;
+            }
 
-        if ($validator->fails()) {
+            $validator = Validator::make($data, [
+                'name' => 'sometimes|string|max:255',
+                'phone' => 'nullable|string|max:20',
+                'photo_url' => 'nullable|url|max:500',
+                'device_token' => 'nullable|string',
+            ], [
+                'name.string' => 'الاسم يجب أن يكون نصاً.',
+                'name.max' => 'الاسم يجب ألا يتجاوز 255 حرفاً.',
+                'phone.string' => 'رقم الهاتف يجب أن يكون نصاً.',
+                'phone.max' => 'رقم الهاتف يجب ألا يتجاوز 20 حرفاً.',
+                'photo_url.url' => 'رابط الصورة غير صحيح.',
+                'photo_url.max' => 'رابط الصورة يجب ألا يتجاوز 500 حرفاً.',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'خطأ في التحقق من البيانات',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $updateData = [];
+            if (isset($data['name'])) $updateData['name'] = $data['name'];
+            if (isset($data['phone'])) $updateData['phone'] = $data['phone'];
+            if (isset($data['photo_url'])) $updateData['photo_url'] = $data['photo_url'];
+            if (isset($data['device_token'])) $updateData['device_token'] = $data['device_token'];
+
+            $client->update($updateData);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تحديث البيانات بنجاح',
+                'data' => [
+                    'client' => $client->fresh()
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Update profile error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Validation error',
-                'errors' => $validator->errors()
-            ], 422);
+                'message' => 'حدث خطأ أثناء تحديث البيانات. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
         }
-
-        $updateData = [];
-        if (isset($data['name'])) $updateData['name'] = $data['name'];
-        if (isset($data['phone'])) $updateData['phone'] = $data['phone'];
-        if (isset($data['photo_url'])) $updateData['photo_url'] = $data['photo_url'];
-        if (isset($data['device_token'])) $updateData['device_token'] = $data['device_token'];
-
-        $client->update($updateData);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'تم تحديث البيانات بنجاح',
-            'data' => [
-                'client' => $client->fresh()
-            ]
-        ], 200);
     }
 
     /**
@@ -277,19 +325,38 @@ class ClientApiController extends Controller
      */
     public function getStatus(Request $request)
     {
-        $client = $request->user();
+        try {
+            $client = $request->user();
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'status' => $client->status,
-                'activation_expires_at' => $client->activation_expires_at,
-                'is_expired' => $client->isActivationExpired(),
-                'is_active' => $client->isActive(),
-                'is_pending' => $client->isPending(),
-                'is_banned' => $client->isBanned(),
-            ]
-        ], 200);
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود أو غير مصرح له.'
+                ], 401);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'status' => $client->status,
+                    'activation_expires_at' => $client->activation_expires_at,
+                    'is_expired' => $client->isActivationExpired(),
+                    'is_active' => $client->isActive(),
+                    'is_pending' => $client->isPending(),
+                    'is_banned' => $client->isBanned(),
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Get status error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب حالة الحساب. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     /**
@@ -297,15 +364,37 @@ class ClientApiController extends Controller
      */
     public function getProducts(Request $request)
     {
-        $client = $request->user();
-        $products = $client->products()->orderBy('created_at', 'desc')->get();
+        try {
+            $client = $request->user();
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'products' => $products
-            ]
-        ], 200);
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود أو غير مصرح له.'
+                ], 401);
+            }
+
+            $products = $client->products()->orderBy('created_at', 'desc')->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'products' => $products,
+                    'count' => $products->count()
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Get products error: ' . $e->getMessage(), [
+                'client_id' => $request->user()?->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب المنتجات. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     /**
@@ -313,49 +402,72 @@ class ClientApiController extends Controller
      */
     public function getProduct(Request $request, $id)
     {
-        $client = $request->user();
-        $product = Product::where('client_id', $client->id)->findOrFail($id);
+        try {
+            $client = $request->user();
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'product' => $product
-            ]
-        ], 200);
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود أو غير مصرح له.'
+                ], 401);
+            }
+
+            $product = Product::where('client_id', $client->id)->find($id);
+
+            if (!$product) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المنتج غير موجود أو ليس لديك صلاحية للوصول إليه.'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'product' => $product
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Get product error: ' . $e->getMessage(), [
+                'product_id' => $id,
+                'client_id' => $request->user()?->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب المنتج. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 
     /**
      * Store new product
      */
-    public function storeProduct(Request $request)
+    public function storeProduct(StoreProductRequest $request)
     {
-        $client = $request->user();
-
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'sku' => 'required|string|unique:products,sku,NULL,id,client_id,' . $client->id,
-            'purchase_price' => 'required|numeric|min:0',
-            'wholesale_price' => 'required|numeric|min:0',
-            'retail_price' => 'required|numeric|min:0',
-            'unit_type' => 'required|in:weight,piece,carton',
-            'weight' => 'required_if:unit_type,weight|nullable|numeric|min:0',
-            'weight_unit' => 'required_if:unit_type,weight|nullable|in:kg,g',
-            'pieces_per_carton' => 'required_if:unit_type,carton|nullable|integer|min:1',
-            'piece_price_in_carton' => 'required_if:unit_type,carton|nullable|numeric|min:0',
-            'total_quantity' => 'required|numeric|min:0',
-            'remaining_quantity' => 'required|numeric|min:0|max:' . $request->total_quantity,
-            'min_quantity' => 'required|numeric|min:0',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'خطأ في التحقق من البيانات',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
+            $client = $request->user();
+
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود أو غير مصرح له.'
+                ], 401);
+            }
+
+            // Validate remaining_quantity doesn't exceed total_quantity
+            if ($request->remaining_quantity > $request->total_quantity) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'الكمية المتبقية لا يمكن أن تكون أكبر من الكمية الكلية.',
+                    'errors' => [
+                        'remaining_quantity' => ['الكمية المتبقية لا يمكن أن تكون أكبر من الكمية الكلية.']
+                    ]
+                ], 422);
+            }
+
             $product = Product::create([
                 'client_id' => $client->id,
                 'name' => $request->name,
@@ -380,9 +492,16 @@ class ClientApiController extends Controller
                     'product' => $product
                 ]
             ], 201);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'خطأ في التحقق من البيانات',
+                'errors' => $e->errors()
+            ], 422);
         } catch (\Exception $e) {
             \Log::error('Product creation error: ' . $e->getMessage(), [
-                'client_id' => $client->id,
+                'client_id' => $request->user()?->id,
+                'request_data' => $request->all(),
                 'trace' => $e->getTraceAsString()
             ]);
 
@@ -397,36 +516,38 @@ class ClientApiController extends Controller
     /**
      * Update product
      */
-    public function updateProduct(Request $request, $id)
+    public function updateProduct(UpdateProductRequest $request, $id)
     {
-        $client = $request->user();
-        $product = Product::where('client_id', $client->id)->findOrFail($id);
-
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'sku' => 'required|string|unique:products,sku,' . $id . ',id,client_id,' . $client->id,
-            'purchase_price' => 'required|numeric|min:0',
-            'wholesale_price' => 'required|numeric|min:0',
-            'retail_price' => 'required|numeric|min:0',
-            'unit_type' => 'required|in:weight,piece,carton',
-            'weight' => 'required_if:unit_type,weight|nullable|numeric|min:0',
-            'weight_unit' => 'required_if:unit_type,weight|nullable|in:kg,g',
-            'pieces_per_carton' => 'required_if:unit_type,carton|nullable|integer|min:1',
-            'piece_price_in_carton' => 'required_if:unit_type,carton|nullable|numeric|min:0',
-            'total_quantity' => 'required|numeric|min:0',
-            'remaining_quantity' => 'required|numeric|min:0|max:' . $request->total_quantity,
-            'min_quantity' => 'required|numeric|min:0',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'خطأ في التحقق من البيانات',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
+            $client = $request->user();
+
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود أو غير مصرح له.'
+                ], 401);
+            }
+
+            $product = Product::where('client_id', $client->id)->find($id);
+
+            if (!$product) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المنتج غير موجود أو ليس لديك صلاحية للوصول إليه.'
+                ], 404);
+            }
+
+            // Validate remaining_quantity doesn't exceed total_quantity
+            if ($request->remaining_quantity > $request->total_quantity) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'الكمية المتبقية لا يمكن أن تكون أكبر من الكمية الكلية.',
+                    'errors' => [
+                        'remaining_quantity' => ['الكمية المتبقية لا يمكن أن تكون أكبر من الكمية الكلية.']
+                    ]
+                ], 422);
+            }
+
             $product->update([
                 'name' => $request->name,
                 'sku' => $request->sku,
@@ -450,9 +571,17 @@ class ClientApiController extends Controller
                     'product' => $product->fresh()
                 ]
             ], 200);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'خطأ في التحقق من البيانات',
+                'errors' => $e->errors()
+            ], 422);
         } catch (\Exception $e) {
             \Log::error('Product update error: ' . $e->getMessage(), [
                 'product_id' => $id,
+                'client_id' => $request->user()?->id,
+                'request_data' => $request->all(),
                 'trace' => $e->getTraceAsString()
             ]);
 
@@ -469,10 +598,25 @@ class ClientApiController extends Controller
      */
     public function deleteProduct(Request $request, $id)
     {
-        $client = $request->user();
-        $product = Product::where('client_id', $client->id)->findOrFail($id);
-
         try {
+            $client = $request->user();
+
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود أو غير مصرح له.'
+                ], 401);
+            }
+
+            $product = Product::where('client_id', $client->id)->find($id);
+
+            if (!$product) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المنتج غير موجود أو ليس لديك صلاحية للوصول إليه.'
+                ], 404);
+            }
+
             $product->delete();
 
             return response()->json([
@@ -482,6 +626,7 @@ class ClientApiController extends Controller
         } catch (\Exception $e) {
             \Log::error('Product deletion error: ' . $e->getMessage(), [
                 'product_id' => $id,
+                'client_id' => $request->user()?->id,
                 'trace' => $e->getTraceAsString()
             ]);
 
@@ -498,18 +643,39 @@ class ClientApiController extends Controller
      */
     public function getLowStockProducts(Request $request)
     {
-        $client = $request->user();
-        $products = $client->products()
-            ->where('is_low_stock', true)
-            ->orderBy('remaining_quantity', 'asc')
-            ->get();
+        try {
+            $client = $request->user();
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'products' => $products,
-                'count' => $products->count()
-            ]
-        ], 200);
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود أو غير مصرح له.'
+                ], 401);
+            }
+
+            $products = $client->products()
+                ->where('is_low_stock', true)
+                ->orderBy('remaining_quantity', 'asc')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'products' => $products,
+                    'count' => $products->count()
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Get low stock products error: ' . $e->getMessage(), [
+                'client_id' => $request->user()?->id,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب المنتجات منخفضة الكمية. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
     }
 }
