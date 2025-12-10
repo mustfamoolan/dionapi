@@ -28,6 +28,9 @@ Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function ()
     Route::get('/users/{id}', [AdminController::class, 'getUser'])->name('users.get');
     Route::put('/users/{id}', [AdminController::class, 'updateUser'])->name('users.update');
     Route::delete('/users/{id}', [AdminController::class, 'deleteUser'])->name('users.delete');
+
+    // Clients API routes
+    Route::get('/clients/data', [AdminController::class, 'getClients'])->name('clients.data');
 });
 
 // Template demo routes (keep for template pages)

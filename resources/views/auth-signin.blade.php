@@ -1,4 +1,4 @@
-@extends('partials.layouts.master-auth')
+@extends('partials.Layouts.master-auth')
 
 @section('title', 'Sign In | Herozi - The Worlds Best Selling Bootstrap Admin & Dashboard Template by SRBThemes')
 

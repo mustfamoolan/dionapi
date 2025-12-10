@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Models\Client;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 
@@ -203,7 +204,48 @@ class AdminController extends Controller
      */
     public function clients()
     {
-        return view('admin.clients');
+        $clients = Client::all();
+        return view('admin.clients', compact('clients'));
+    }
+
+    /**
+     * Get clients data for DataTable
+     */
+    public function getClients(Request $request)
+    {
+        $clients = Client::select(['id', 'firebase_uid', 'name', 'email', 'phone', 'photo_url', 'provider', 'is_active', 'last_login_at', 'created_at'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'data' => $clients->map(function ($client) {
+                return [
+                    'id' => $client->id,
+                    'name' => $client->name,
+                    'email' => $client->email,
+                    'phone' => $client->phone ?? '-',
+                    'provider' => $this->getProviderBadge($client->provider),
+                    'photo_url' => $client->photo_url ?? asset('assets/images/avatar/dummy-avatar.jpg'),
+                    'is_active' => $client->is_active ? '<span class="badge bg-success">نشط</span>' : '<span class="badge bg-danger">غير نشط</span>',
+                    'last_login_at' => $client->last_login_at ? $client->last_login_at->format('Y-m-d H:i') : '-',
+                    'created_at' => $client->created_at->format('Y-m-d'),
+                ];
+            })
+        ]);
+    }
+
+    /**
+     * Get provider badge HTML
+     */
+    private function getProviderBadge($provider)
+    {
+        $badges = [
+            'google' => '<span class="badge bg-danger">Google</span>',
+            'facebook' => '<span class="badge bg-primary">Facebook</span>',
+            'apple' => '<span class="badge bg-dark">Apple</span>',
+        ];
+
+        return $badges[$provider] ?? '<span class="badge bg-secondary">' . $provider . '</span>';
     }
 
     /**

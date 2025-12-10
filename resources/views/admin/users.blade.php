@@ -1,4 +1,4 @@
-@extends('partials.layouts.master')
+@extends('partials.Layouts.master')
 
 @section('title', 'المستخدمين | Herozi')
 @section('sub-title', 'المستخدمين')
