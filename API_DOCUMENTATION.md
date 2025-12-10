@@ -16,9 +16,11 @@
 2. [تسجيل الدخول](#تسجيل-الدخول)
 3. [الملف الشخصي](#الملف-الشخصي)
 4. [تحديث الملف الشخصي](#تحديث-الملف-الشخصي)
-5. [تسجيل الخروج](#تسجيل-الخروج)
-6. [تحديث التوكن](#تحديث-التوكن)
-7. [أكواد الأخطاء](#أكواد-الأخطاء)
+5. [حالة العميل](#حالة-العميل)
+6. [تسجيل الخروج](#تسجيل-الخروج)
+7. [تحديث التوكن](#تحديث-التوكن)
+8. [حالات العميل](#حالات-العميل)
+9. [أكواد الأخطاء](#أكواد-الأخطاء)
 
 ---
 
@@ -85,7 +87,9 @@ Accept: application/json
       "photo_url": "https://example.com/photo.jpg",
       "provider": "google",
       "provider_id": "google_user_id_123",
-      "is_active": true,
+      "status": "pending",
+      "activation_expires_at": null,
+      "is_active": false,
       "last_login_at": "2025-12-10T15:30:00.000000Z",
       "created_at": "2025-12-10T15:30:00.000000Z",
       "updated_at": "2025-12-10T15:30:00.000000Z"
@@ -161,6 +165,8 @@ Accept: application/json
       "phone": "07701234567",
       "photo_url": "https://example.com/photo.jpg",
       "provider": "google",
+      "status": "active",
+      "activation_expires_at": "2026-12-10T00:00:00.000000Z",
       "is_active": true,
       "last_login_at": "2025-12-10T16:00:00.000000Z",
       "created_at": "2025-12-10T15:30:00.000000Z",
@@ -183,10 +189,27 @@ Accept: application/json
 
 ### Response (Error - 403)
 
+**حالة محظور:**
 ```json
 {
   "success": false,
-  "message": "حسابك غير نشط. يرجى التواصل مع الدعم."
+  "message": "حسابك محظور. يرجى التواصل مع الدعم."
+}
+```
+
+**حالة في الانتظار:**
+```json
+{
+  "success": false,
+  "message": "حسابك في قائمة الانتظار. يرجى انتظار التفعيل من الإدارة."
+}
+```
+
+**حساب غير مفعل أو منتهي:**
+```json
+{
+  "success": false,
+  "message": "حسابك غير مفعل أو انتهت مدة التفعيل. يرجى التواصل مع الدعم."
 }
 ```
 
@@ -300,6 +323,8 @@ Accept: application/json
       "phone": "07701234568",
       "photo_url": "https://example.com/new-photo.jpg",
       "provider": "google",
+      "status": "active",
+      "activation_expires_at": "2026-12-10T00:00:00.000000Z",
       "is_active": true,
       "last_login_at": "2025-12-10T16:00:00.000000Z",
       "created_at": "2025-12-10T15:30:00.000000Z",
@@ -320,6 +345,55 @@ Accept: application/json
   }
 }
 ```
+
+---
+
+## حالة العميل
+
+الحصول على حالة العميل الحالي وتفاصيل التفعيل.
+
+### Endpoint
+
+```
+GET /api/clients/status
+```
+
+### Headers
+
+```
+Authorization: Bearer {token}
+Accept: application/json
+```
+
+### Response (Success - 200)
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "active",
+    "activation_expires_at": "2026-12-10T00:00:00.000000Z",
+    "is_expired": false,
+    "is_active": true,
+    "is_pending": false,
+    "is_banned": false
+  }
+}
+```
+
+### Response (Error - 401)
+
+```json
+{
+  "message": "Unauthenticated."
+}
+```
+
+### حالات العميل
+
+- **pending** (في الانتظار): الحالة الافتراضية عند التسجيل. العميل لا يمكنه استخدام التطبيق حتى يتم تفعيله.
+- **active** (مفعل): العميل مفعل ويمكنه استخدام التطبيق. يجب أن يكون `activation_expires_at` في المستقبل.
+- **banned** (محظور): العميل محظور ولا يمكنه استخدام التطبيق.
 
 ---
 
@@ -399,6 +473,43 @@ Accept: application/json
 
 ---
 
+## حالات العميل
+
+### نظرة عامة
+
+كل عميل له حالة واحدة من ثلاث حالات:
+
+1. **pending** (في الانتظار)
+   - الحالة الافتراضية عند التسجيل
+   - العميل لا يمكنه تسجيل الدخول
+   - يحتاج إلى تفعيل من المدير
+
+2. **active** (مفعل)
+   - العميل مفعل ويمكنه استخدام التطبيق
+   - يجب أن يكون `activation_expires_at` في المستقبل
+   - عند انتهاء المدة، يصبح الحساب غير نشط تلقائياً
+
+3. **banned** (محظور)
+   - العميل محظور ولا يمكنه استخدام التطبيق
+   - يمكن للمدير حظر العميل من لوحة التحكم
+
+### مدة التفعيل
+
+- عند تفعيل العميل، المدير يحدد عدد الأشهر (1-120 شهر)
+- يتم حساب `activation_expires_at` = تاريخ التفعيل + عدد الأشهر
+- عند انتهاء المدة، `is_expired` يصبح `true`
+- العميل مع `is_expired: true` لا يمكنه تسجيل الدخول حتى يتم تجديد التفعيل
+
+### التحقق من الحالة
+
+عند تسجيل الدخول، يتم التحقق من:
+1. وجود العميل
+2. الحالة ليست `banned`
+3. الحالة ليست `pending`
+4. الحالة `active` و `activation_expires_at` لم تنتهِ
+
+---
+
 ## أكواد الأخطاء
 
 | الكود | المعنى | الوصف |
@@ -406,7 +517,7 @@ Accept: application/json
 | 200 | OK | الطلب نجح |
 | 201 | Created | تم إنشاء المورد بنجاح |
 | 401 | Unauthorized | غير مصرح - التوكن غير صحيح أو منتهي |
-| 403 | Forbidden | محظور - الحساب غير نشط |
+| 403 | Forbidden | محظور - الحساب محظور/في الانتظار/غير مفعل أو منتهي |
 | 404 | Not Found | غير موجود - العميل غير موجود |
 | 422 | Validation Error | خطأ في التحقق من البيانات |
 | 500 | Internal Server Error | خطأ في الخادم |
@@ -483,6 +594,28 @@ const getProfile = async () => {
   const data = await response.json();
   if (data.success) {
     return data.data.client;
+  } else {
+    throw new Error(data.message);
+  }
+};
+```
+
+#### الحصول على حالة العميل
+
+```javascript
+const getStatus = async () => {
+  const token = localStorage.getItem('token');
+  const response = await fetch('http://your-domain.com/api/clients/status', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/json'
+    }
+  });
+
+  const data = await response.json();
+  if (data.success) {
+    return data.data;
   } else {
     throw new Error(data.message);
   }
@@ -575,6 +708,14 @@ curl -X GET http://your-domain.com/api/clients/profile \
   -H "Accept: application/json"
 ```
 
+#### الحصول على حالة العميل
+
+```bash
+curl -X GET http://your-domain.com/api/clients/status \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Accept: application/json"
+```
+
 ---
 
 ## ملاحظات مهمة
@@ -587,11 +728,23 @@ curl -X GET http://your-domain.com/api/clients/profile \
 
 4. **Device Token:** يُستخدم لإرسال الإشعارات للعميل. يمكن تحديثه في أي وقت.
 
-5. **الحالة (is_active):** يمكن للمدير تعطيل حساب عميل من لوحة التحكم. العميل غير النشط لا يمكنه تسجيل الدخول.
+5. **حالة العميل (status):** كل عميل له حالة واحدة من ثلاث حالات:
+   - `pending` (في الانتظار): الحالة الافتراضية عند التسجيل
+   - `active` (مفعل): العميل مفعل ويمكنه استخدام التطبيق
+   - `banned` (محظور): العميل محظور ولا يمكنه استخدام التطبيق
+   
+   يمكن للمدير تغيير حالة العميل من لوحة التحكم مع تحديد مدة التفعيل بالأشهر (1-120 شهر).
 
-6. **آخر تسجيل دخول:** يتم تحديث `last_login_at` تلقائياً عند تسجيل الدخول.
+6. **مدة التفعيل (activation_expires_at):** عند تفعيل العميل، يتم تحديد تاريخ انتهاء التفعيل بناءً على عدد الأشهر المحددة. عند انتهاء المدة، يصبح الحساب غير نشط تلقائياً.
 
-7. **التوكنات:** يمكن للعميل الحصول على عدة توكنات (لأجهزة مختلفة). عند استخدام `refresh-token`، يتم حذف جميع التوكنات القديمة.
+7. **التحقق من الحالة:** عند تسجيل الدخول، يتم التحقق من:
+   - الحالة ليست `banned`
+   - الحالة ليست `pending`
+   - الحالة `active` و `activation_expires_at` لم تنتهِ
+
+8. **آخر تسجيل دخول:** يتم تحديث `last_login_at` تلقائياً عند تسجيل الدخول.
+
+9. **التوكنات:** يمكن للعميل الحصول على عدة توكنات (لأجهزة مختلفة). عند استخدام `refresh-token`، يتم حذف جميع التوكنات القديمة.
 
 ---
 
