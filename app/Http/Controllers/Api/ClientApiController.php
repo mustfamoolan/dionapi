@@ -16,7 +16,7 @@ class ClientApiController extends Controller
     {
         // Clean and prepare data
         $data = $request->all();
-        
+
         // Handle photo_url - accept empty string as null
         if (isset($data['photo_url']) && empty(trim($data['photo_url']))) {
             $data['photo_url'] = null;
@@ -38,7 +38,7 @@ class ClientApiController extends Controller
                 'errors' => $validator->errors()->toArray(),
                 'request_data' => $data
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'خطأ في التحقق من البيانات',
@@ -56,7 +56,8 @@ class ClientApiController extends Controller
                 'provider' => $data['provider'],
                 'provider_id' => $data['provider_id'] ?? null,
                 'device_token' => $data['device_token'] ?? null,
-                'is_active' => true,
+                'status' => 'pending', // Default status is pending
+                'is_active' => false, // Keep for backward compatibility
                 'last_login_at' => now(),
             ]);
 
@@ -113,10 +114,25 @@ class ClientApiController extends Controller
                 ], 404);
             }
 
-            if (!$client->is_active) {
+            // Check client status
+            if ($client->isBanned()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'حسابك غير نشط. يرجى التواصل مع الدعم.'
+                    'message' => 'حسابك محظور. يرجى التواصل مع الدعم.'
+                ], 403);
+            }
+
+            if ($client->isPending()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'حسابك في قائمة الانتظار. يرجى انتظار التفعيل من الإدارة.'
+                ], 403);
+            }
+
+            if (!$client->isActive()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'حسابك غير مفعل أو انتهت مدة التفعيل. يرجى التواصل مع الدعم.'
                 ], 403);
             }
 
@@ -178,7 +194,7 @@ class ClientApiController extends Controller
 
         // Clean and prepare data
         $data = $request->all();
-        
+
         // Handle photo_url - accept empty string as null
         if (isset($data['photo_url']) && empty(trim($data['photo_url']))) {
             $data['photo_url'] = null;
@@ -204,7 +220,7 @@ class ClientApiController extends Controller
         if (isset($data['phone'])) $updateData['phone'] = $data['phone'];
         if (isset($data['photo_url'])) $updateData['photo_url'] = $data['photo_url'];
         if (isset($data['device_token'])) $updateData['device_token'] = $data['device_token'];
-        
+
         $client->update($updateData);
 
         return response()->json([
@@ -251,6 +267,26 @@ class ClientApiController extends Controller
             'data' => [
                 'token' => $token,
                 'token_type' => 'Bearer',
+            ]
+        ], 200);
+    }
+
+    /**
+     * Get client status
+     */
+    public function getStatus(Request $request)
+    {
+        $client = $request->user();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'status' => $client->status,
+                'activation_expires_at' => $client->activation_expires_at,
+                'is_expired' => $client->isActivationExpired(),
+                'is_active' => $client->isActive(),
+                'is_pending' => $client->isPending(),
+                'is_banned' => $client->isBanned(),
             ]
         ], 200);
     }

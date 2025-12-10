@@ -22,6 +22,7 @@ Route::post('/clients/login', [ClientApiController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/clients/profile', [ClientApiController::class, 'profile']);
     Route::put('/clients/profile', [ClientApiController::class, 'updateProfile']);
+    Route::get('/clients/status', [ClientApiController::class, 'getStatus']);
     Route::post('/clients/logout', [ClientApiController::class, 'logout']);
     Route::post('/clients/refresh-token', [ClientApiController::class, 'refreshToken']);
 });

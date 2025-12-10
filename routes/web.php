@@ -31,6 +31,8 @@ Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function ()
 
     // Clients API routes
     Route::get('/clients/data', [AdminController::class, 'getClients'])->name('clients.data');
+    Route::get('/clients/{id}', [AdminController::class, 'getClient'])->name('clients.get');
+    Route::put('/clients/{id}/status', [AdminController::class, 'updateClientStatus'])->name('clients.updateStatus');
 });
 
 // Template demo routes (keep for template pages)

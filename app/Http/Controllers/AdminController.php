@@ -213,7 +213,7 @@ class AdminController extends Controller
      */
     public function getClients(Request $request)
     {
-        $clients = Client::select(['id', 'firebase_uid', 'name', 'email', 'phone', 'photo_url', 'provider', 'is_active', 'last_login_at', 'created_at'])
+        $clients = Client::select(['id', 'firebase_uid', 'name', 'email', 'phone', 'photo_url', 'provider', 'status', 'activation_expires_at', 'last_login_at', 'created_at'])
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -226,12 +226,91 @@ class AdminController extends Controller
                     'phone' => $client->phone ?? '-',
                     'provider' => $this->getProviderBadge($client->provider),
                     'photo_url' => $client->photo_url ?? asset('assets/images/avatar/dummy-avatar.jpg'),
-                    'is_active' => $client->is_active ? '<span class="badge bg-success">نشط</span>' : '<span class="badge bg-danger">غير نشط</span>',
+                    'status' => $this->getStatusBadge($client->status),
+                    'status_value' => $client->status,
+                    'activation_expires_at' => $client->activation_expires_at ? $client->activation_expires_at->format('Y-m-d') : '-',
                     'last_login_at' => $client->last_login_at ? $client->last_login_at->format('Y-m-d H:i') : '-',
                     'created_at' => $client->created_at->format('Y-m-d'),
                 ];
             })
         ]);
+    }
+
+    /**
+     * Get client by ID
+     */
+    public function getClient($id)
+    {
+        $client = Client::findOrFail($id);
+        return response()->json([
+            'success' => true,
+            'client' => [
+                'id' => $client->id,
+                'name' => $client->name,
+                'email' => $client->email,
+                'phone' => $client->phone,
+                'status' => $client->status,
+                'activation_expires_at' => $client->activation_expires_at ? $client->activation_expires_at->format('Y-m-d') : null,
+            ]
+        ]);
+    }
+
+    /**
+     * Update client status
+     */
+    public function updateClientStatus(Request $request, $id)
+    {
+        $request->validate([
+            'status' => 'required|in:pending,active,banned',
+            'months' => 'required_if:status,active|integer|min:1|max:120',
+        ]);
+
+        $client = Client::findOrFail($id);
+
+        switch ($request->status) {
+            case 'active':
+                $months = $request->months ?? 1;
+                $client->activate($months);
+                $message = "تم تفعيل العميل لمدة {$months} شهر بنجاح";
+                break;
+            case 'banned':
+                $client->ban();
+                $message = 'تم حظر العميل بنجاح';
+                break;
+            case 'pending':
+                $client->setPending();
+                $message = 'تم وضع العميل في قائمة الانتظار بنجاح';
+                break;
+            default:
+                return response()->json([
+                    'success' => false,
+                    'message' => 'حالة غير صحيحة'
+                ], 400);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'client' => [
+                'id' => $client->id,
+                'status' => $client->status,
+                'activation_expires_at' => $client->activation_expires_at ? $client->activation_expires_at->format('Y-m-d') : null,
+            ]
+        ]);
+    }
+
+    /**
+     * Get status badge HTML
+     */
+    private function getStatusBadge($status)
+    {
+        $badges = [
+            'pending' => '<span class="badge bg-warning">في الانتظار</span>',
+            'active' => '<span class="badge bg-success">مفعل</span>',
+            'banned' => '<span class="badge bg-danger">محظور</span>',
+        ];
+
+        return $badges[$status] ?? '<span class="badge bg-secondary">' . $status . '</span>';
     }
 
     /**

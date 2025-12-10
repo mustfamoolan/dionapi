@@ -25,6 +25,8 @@ class Client extends Model
         'provider_id',
         'device_token',
         'is_active',
+        'status',
+        'activation_expires_at',
         'last_login_at',
     ];
 
@@ -46,8 +48,19 @@ class Client extends Model
     {
         return [
             'is_active' => 'boolean',
+            'activation_expires_at' => 'datetime',
             'last_login_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Check if client is pending
+     *
+     * @return bool
+     */
+    public function isPending(): bool
+    {
+        return $this->status === 'pending';
     }
 
     /**
@@ -57,6 +70,69 @@ class Client extends Model
      */
     public function isActive(): bool
     {
-        return $this->is_active;
+        return $this->status === 'active' && !$this->isActivationExpired();
+    }
+
+    /**
+     * Check if client is banned
+     *
+     * @return bool
+     */
+    public function isBanned(): bool
+    {
+        return $this->status === 'banned';
+    }
+
+    /**
+     * Check if activation is expired
+     *
+     * @return bool
+     */
+    public function isActivationExpired(): bool
+    {
+        if (!$this->activation_expires_at) {
+            return false;
+        }
+        return now()->isAfter($this->activation_expires_at);
+    }
+
+    /**
+     * Activate client for specified months
+     *
+     * @param int $months
+     * @return bool
+     */
+    public function activate(int $months): bool
+    {
+        return $this->update([
+            'status' => 'active',
+            'activation_expires_at' => now()->addMonths($months),
+        ]);
+    }
+
+    /**
+     * Ban client
+     *
+     * @return bool
+     */
+    public function ban(): bool
+    {
+        return $this->update([
+            'status' => 'banned',
+            'activation_expires_at' => null,
+        ]);
+    }
+
+    /**
+     * Set client to pending
+     *
+     * @return bool
+     */
+    public function setPending(): bool
+    {
+        return $this->update([
+            'status' => 'pending',
+            'activation_expires_at' => null,
+        ]);
     }
 }
