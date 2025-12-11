@@ -9,7 +9,7 @@ return [
     | Path to the Firebase service account JSON file.
     |
     */
-    'credentials' => env('FIREBASE_CREDENTIALS', storage_path('app/firebase-service-account.json')),
+    'credentials' => env('FIREBASE_CREDENTIALS', storage_path('app/dion-31580-firebase-adminsdk-fbsvc-3760176ec2.json')),
 
     /*
     |--------------------------------------------------------------------------
