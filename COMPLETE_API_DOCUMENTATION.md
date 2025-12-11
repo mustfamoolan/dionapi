@@ -231,10 +231,11 @@ Accept: application/json
 - `success`: true
 - `data.status`: حالة العميل (pending, active, banned)
 - `data.activation_expires_at`: تاريخ انتهاء التفعيل
-- `data.is_expired`: هل انتهت مدة التفعيل
+- `data.is_expired`: هل انتهت مدة التفعيل أو الاشتراك منتهي
 - `data.is_active`: هل الحساب مفعل
 - `data.is_pending`: هل الحساب في الانتظار
 - `data.is_banned`: هل الحساب محظور
+- `data.is_subscription_expired`: هل الاشتراك منتهي (حالة expired)
 
 **Response Error (401):**
 - `success`: false
