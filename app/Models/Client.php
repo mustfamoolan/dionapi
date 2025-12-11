@@ -27,6 +27,7 @@ class Client extends Model
         'is_active',
         'status',
         'activation_expires_at',
+        'last_status_change_at',
         'last_login_at',
     ];
 
@@ -49,6 +50,7 @@ class Client extends Model
         return [
             'is_active' => 'boolean',
             'activation_expires_at' => 'datetime',
+            'last_status_change_at' => 'datetime',
             'last_login_at' => 'datetime',
         ];
     }
@@ -117,6 +119,7 @@ class Client extends Model
         return $this->update([
             'status' => 'active',
             'activation_expires_at' => now()->addMonths($months),
+            'last_status_change_at' => now(),
         ]);
     }
 
@@ -130,6 +133,7 @@ class Client extends Model
         return $this->update([
             'status' => 'banned',
             'activation_expires_at' => null,
+            'last_status_change_at' => now(),
         ]);
     }
 
@@ -143,6 +147,7 @@ class Client extends Model
         return $this->update([
             'status' => 'pending',
             'activation_expires_at' => null,
+            'last_status_change_at' => now(),
         ]);
     }
 
@@ -155,6 +160,7 @@ class Client extends Model
     {
         return $this->update([
             'status' => 'expired',
+            'last_status_change_at' => now(),
         ]);
     }
 

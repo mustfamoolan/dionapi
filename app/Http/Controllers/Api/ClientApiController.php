@@ -342,18 +342,19 @@ class ClientApiController extends Controller
                 ], 401);
             }
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'status' => $client->status,
-                'activation_expires_at' => $client->activation_expires_at,
-                'is_expired' => $client->isExpired() || $client->isActivationExpired(),
-                'is_active' => $client->isActive(),
-                'is_pending' => $client->isPending(),
-                'is_banned' => $client->isBanned(),
-                'is_subscription_expired' => $client->isExpired(),
-            ]
-        ], 200);
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'status' => $client->status,
+                    'activation_expires_at' => $client->activation_expires_at,
+                    'last_status_change_at' => $client->last_status_change_at,
+                    'is_expired' => $client->isExpired() || $client->isActivationExpired(),
+                    'is_active' => $client->isActive(),
+                    'is_pending' => $client->isPending(),
+                    'is_banned' => $client->isBanned(),
+                    'is_subscription_expired' => $client->isExpired(),
+                ]
+            ], 200);
         } catch (\Exception $e) {
             \Log::error('Get status error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
@@ -362,6 +363,94 @@ class ClientApiController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'حدث خطأ أثناء جلب حالة الحساب. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
+    }
+
+    /**
+     * Check client status with last update timestamp
+     * Useful for polling to detect status changes
+     */
+    public function getStatusCheck(Request $request)
+    {
+        try {
+            $client = $request->user();
+
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود أو غير مصرح له.'
+                ], 401);
+            }
+
+            // Refresh client data
+            $client->refresh();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'status' => $client->status,
+                    'activation_expires_at' => $client->activation_expires_at,
+                    'last_status_change_at' => $client->last_status_change_at,
+                    'last_status_change_timestamp' => $client->last_status_change_at ? $client->last_status_change_at->timestamp : null,
+                    'is_expired' => $client->isExpired() || $client->isActivationExpired(),
+                    'is_subscription_expired' => $client->isExpired(),
+                    'is_active' => $client->isActive(),
+                    'is_pending' => $client->isPending(),
+                    'is_banned' => $client->isBanned(),
+                    'current_timestamp' => now()->timestamp,
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Get status check error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء التحقق من حالة الحساب. يرجى المحاولة مرة أخرى.',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
+    }
+
+    /**
+     * Get last status update timestamp only
+     * Lightweight endpoint for polling
+     */
+    public function getLastStatusUpdate(Request $request)
+    {
+        try {
+            $client = $request->user();
+
+            if (!$client) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'المستخدم غير موجود أو غير مصرح له.'
+                ], 401);
+            }
+
+            // Refresh client data
+            $client->refresh();
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'last_status_change_at' => $client->last_status_change_at,
+                    'last_status_change_timestamp' => $client->last_status_change_at ? $client->last_status_change_at->timestamp : null,
+                    'status' => $client->status,
+                    'current_timestamp' => now()->timestamp,
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Get last status update error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب آخر تحديث للحالة. يرجى المحاولة مرة أخرى.',
                 'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }

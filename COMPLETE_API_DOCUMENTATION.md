@@ -43,6 +43,7 @@
     - [1. pending (في الانتظار)](#1-pending-في-الانتظار)
     - [2. active (مفعل)](#2-active-مفعل)
     - [3. banned (محظور)](#3-banned-محظور)
+    - [4. expired (انتهى الاشتراك)](#4-expired-انتهى-الاشتراك)
   - [أنواع وحدات المنتجات](#أنواع-وحدات-المنتجات)
     - [1. وزن (weight)](#1-وزن-weight)
     - [2. قطعة (piece)](#2-قطعة-piece)
@@ -229,8 +230,9 @@ Accept: application/json
 
 **Response Success (200):**
 - `success`: true
-- `data.status`: حالة العميل (pending, active, banned)
+- `data.status`: حالة العميل (pending, active, banned, expired)
 - `data.activation_expires_at`: تاريخ انتهاء التفعيل
+- `data.last_status_change_at`: تاريخ آخر تغيير في الحالة
 - `data.is_expired`: هل انتهت مدة التفعيل أو الاشتراك منتهي
 - `data.is_active`: هل الحساب مفعل
 - `data.is_pending`: هل الحساب في الانتظار
@@ -244,6 +246,76 @@ Accept: application/json
 **Response Error (500):**
 - `success`: false
 - `message`: "حدث خطأ أثناء جلب حالة الحساب. يرجى المحاولة مرة أخرى."
+
+---
+
+### التحقق من حالة العميل (مع timestamp)
+
+**Endpoint:** `GET /api/clients/status/check`
+
+**Headers:**
+- `Authorization: Bearer {token}`
+- `Accept: application/json`
+
+**الوصف:** هذا الـ endpoint مفيد للتحقق من حالة الحساب مع timestamp آخر تحديث. يمكن للتطبيق استخدامه بشكل دوري (polling) للتحقق من تغييرات الحالة.
+
+**Response Success (200):**
+- `success`: true
+- `data.status`: حالة العميل (pending, active, banned, expired)
+- `data.activation_expires_at`: تاريخ انتهاء التفعيل
+- `data.last_status_change_at`: تاريخ آخر تغيير في الحالة
+- `data.last_status_change_timestamp`: timestamp آخر تغيير (Unix timestamp)
+- `data.current_timestamp`: timestamp الحالي (Unix timestamp)
+- `data.is_expired`: هل انتهت مدة التفعيل أو الاشتراك منتهي
+- `data.is_subscription_expired`: هل الاشتراك منتهي (حالة expired)
+- `data.is_active`: هل الحساب مفعل
+- `data.is_pending`: هل الحساب في الانتظار
+- `data.is_banned`: هل الحساب محظور
+
+**Response Error (401):**
+- `success`: false
+- `message`: "المستخدم غير موجود أو غير مصرح له."
+
+**Response Error (500):**
+- `success`: false
+- `message`: "حدث خطأ أثناء التحقق من حالة الحساب. يرجى المحاولة مرة أخرى."
+
+**ملاحظات:**
+- يمكن للتطبيق حفظ `last_status_change_timestamp` محلياً ومقارنته مع القيمة الجديدة
+- إذا تغير `last_status_change_timestamp`، فهذا يعني أن الحالة تغيرت
+- يُنصح باستخدام هذا الـ endpoint كل 30-60 ثانية عند الحاجة
+
+---
+
+### آخر تحديث للحالة (Lightweight)
+
+**Endpoint:** `GET /api/clients/status/last-update`
+
+**Headers:**
+- `Authorization: Bearer {token}`
+- `Accept: application/json`
+
+**الوصف:** هذا الـ endpoint خفيف الوزن ويعيد فقط timestamp آخر تحديث للحالة. مفيد للتحقق السريع من التغييرات بدون جلب جميع بيانات الحالة.
+
+**Response Success (200):**
+- `success`: true
+- `data.last_status_change_at`: تاريخ آخر تغيير في الحالة
+- `data.last_status_change_timestamp`: timestamp آخر تغيير (Unix timestamp)
+- `data.status`: حالة العميل الحالية
+- `data.current_timestamp`: timestamp الحالي (Unix timestamp)
+
+**Response Error (401):**
+- `success`: false
+- `message`: "المستخدم غير موجود أو غير مصرح له."
+
+**Response Error (500):**
+- `success`: false
+- `message`: "حدث خطأ أثناء جلب آخر تحديث للحالة. يرجى المحاولة مرة أخرى."
+
+**ملاحظات:**
+- هذا الـ endpoint أخف من `/status/check` لأنه يعيد بيانات أقل
+- مناسب للاستخدام المتكرر (polling) كل 10-30 ثانية
+- إذا تغير `last_status_change_timestamp`، يمكن للتطبيق استدعاء `/status` أو `/status/check` للحصول على التفاصيل الكاملة
 
 ---
 
@@ -696,6 +768,26 @@ Accept: application/json
 
 ### آخر تسجيل دخول
 - يتم تحديث `last_login_at` تلقائياً عند تسجيل الدخول.
+
+### آخر تغيير في الحالة
+- يتم تحديث `last_status_change_at` تلقائياً عند تغيير حالة العميل من لوحة التحكم.
+- يمكن للتطبيق استخدام هذا الحقل للتحقق من التغييرات عبر polling.
+
+### Push Notifications
+- عند تغيير حالة العميل، يتم إرسال push notification تلقائياً إذا كان `device_token` موجود.
+- البيانات المرسلة في push notification تشمل:
+  - `type`: "status_change"
+  - `status`: الحالة الجديدة
+  - `last_status_change_at`: timestamp التغيير
+  - `timestamp`: timestamp الإشعار
+  - جميع flags الحالة (is_active, is_pending, is_banned, is_expired, is_subscription_expired)
+
+### Polling للحالة
+- للتطبيقات التي تحتاج معرفة فورية عن تغييرات الحالة:
+  1. استخدم `/api/clients/status/last-update` كل 10-30 ثانية
+  2. قارن `last_status_change_timestamp` مع القيمة المحفوظة محلياً
+  3. إذا تغير، استدعِ `/api/clients/status/check` للحصول على التفاصيل الكاملة
+  4. حدث واجهة المستخدم بناءً على الحالة الجديدة
 
 ---
 

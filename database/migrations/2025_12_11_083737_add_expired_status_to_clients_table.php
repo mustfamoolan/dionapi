@@ -14,7 +14,7 @@ return new class extends Migration
     {
         // Modify the enum to include 'expired'
         DB::statement("ALTER TABLE clients MODIFY COLUMN status ENUM('pending', 'active', 'banned', 'expired') DEFAULT 'pending'");
-        
+
         // Update clients with expired activation to 'expired' status
         DB::table('clients')
             ->where('status', 'active')
@@ -32,7 +32,7 @@ return new class extends Migration
         DB::table('clients')
             ->where('status', 'expired')
             ->update(['status' => 'active']);
-        
+
         // Revert enum to original values
         DB::statement("ALTER TABLE clients MODIFY COLUMN status ENUM('pending', 'active', 'banned') DEFAULT 'pending'");
     }
