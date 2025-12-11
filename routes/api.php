@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\ClientApiController;
 
 /*
 |--------------------------------------------------------------------------
@@ -14,26 +13,4 @@ use App\Http\Controllers\Api\ClientApiController;
 |
 */
 
-// Public routes (no authentication required)
-Route::post('/clients/register', [ClientApiController::class, 'register']);
-Route::post('/clients/login', [ClientApiController::class, 'login']);
-
-// Protected routes (require authentication)
-Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/clients/profile', [ClientApiController::class, 'profile']);
-    Route::put('/clients/profile', [ClientApiController::class, 'updateProfile']);
-    Route::get('/clients/status', [ClientApiController::class, 'getStatus']);
-    Route::get('/clients/status/check', [ClientApiController::class, 'getStatusCheck']);
-    Route::get('/clients/status/last-update', [ClientApiController::class, 'getLastStatusUpdate']);
-    Route::post('/clients/logout', [ClientApiController::class, 'logout']);
-    Route::post('/clients/refresh-token', [ClientApiController::class, 'refreshToken']);
-
-    // Products routes
-    Route::get('/clients/products', [ClientApiController::class, 'getProducts']);
-    Route::get('/clients/products/low-stock', [ClientApiController::class, 'getLowStockProducts']);
-    Route::get('/clients/products/{id}', [ClientApiController::class, 'getProduct']);
-    Route::post('/clients/products', [ClientApiController::class, 'storeProduct']);
-    Route::put('/clients/products/{id}', [ClientApiController::class, 'updateProduct']);
-    Route::delete('/clients/products/{id}', [ClientApiController::class, 'deleteProduct']);
-});
-
+// API routes removed - clients and products are now managed via Firebase

@@ -21,3 +21,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Firebase Service Account Keys
+**/*firebase*adminsdk*.json
+storage/app/firebase-service-account.json

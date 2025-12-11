@@ -1,0 +1,46 @@
+<?php
+
+return [
+    /*
+    |--------------------------------------------------------------------------
+    | Firebase Service Account
+    |--------------------------------------------------------------------------
+    |
+    | Path to the Firebase service account JSON file.
+    |
+    */
+    'credentials' => storage_path('app/firebase-service-account.json'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Firebase Project ID
+    |--------------------------------------------------------------------------
+    |
+    | Your Firebase project ID.
+    |
+    */
+    'project_id' => env('FIREBASE_PROJECT_ID', 'dion-31580'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Firestore Collection Names
+    |--------------------------------------------------------------------------
+    |
+    | Collection names used in Firestore.
+    |
+    */
+    'collections' => [
+        'users' => 'users',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Use REST API instead of gRPC
+    |--------------------------------------------------------------------------
+    |
+    | Set to true to force REST API usage (useful when gRPC extension is not available)
+    |
+    */
+    'use_rest_api' => env('FIREBASE_USE_REST_API', true),
+];
+

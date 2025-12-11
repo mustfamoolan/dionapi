@@ -32,85 +32,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($clients as $client)
-                        <tr data-id="{{ $client->id }}">
-                            <td>
-                                <div class="d-flex gap-3 justify-content-start align-items-center">
-                                    <div class="avatar avatar-sm">
-                                        <img src="{{ $client->photo_url ?? asset('assets/images/avatar/dummy-avatar.jpg') }}" alt="Avatar" class="avatar-item avatar rounded-circle">
-                                    </div>
-                                    <div class="d-flex flex-column">
-                                        <p class="mb-0 fw-medium">{{ $client->name }}</p>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>{{ $client->email }}</td>
-                            <td>{{ $client->phone ?? '-' }}</td>
-                            <td>
-                                @if($client->provider == 'google')
-                                    <span class="badge bg-danger">Google</span>
-                                @elseif($client->provider == 'facebook')
-                                    <span class="badge bg-primary">Facebook</span>
-                                @elseif($client->provider == 'apple')
-                                    <span class="badge bg-dark">Apple</span>
-                                @else
-                                    <span class="badge bg-secondary">{{ $client->provider }}</span>
-                                @endif
-                            </td>
-                            <td>
-                                @if($client->status == 'active')
-                                    <span class="badge bg-success">مفعل</span>
-                                @elseif($client->status == 'pending')
-                                    <span class="badge bg-warning">في الانتظار</span>
-                                @elseif($client->status == 'banned')
-                                    <span class="badge bg-danger">محظور</span>
-                                @elseif($client->status == 'expired')
-                                    <span class="badge bg-info">انتهى الاشتراك</span>
-                                @else
-                                    <span class="badge bg-secondary">{{ $client->status }}</span>
-                                @endif
-                            </td>
-                            <td>
-                                @if($client->activation_expires_at)
-                                    {{ $client->activation_expires_at->format('Y-m-d') }}
-                                    @if($client->activation_expires_at->isPast())
-                                        <span class="badge bg-danger ms-1">منتهي</span>
-                                    @endif
-                                @else
-                                    -
-                                @endif
-                            </td>
-                            <td>{{ $client->last_login_at ? $client->last_login_at->format('Y-m-d H:i') : '-' }}</td>
-                            <td>{{ $client->created_at->format('Y-m-d') }}</td>
-                            <td>
-                                <div class="hstack gap-2">
-                                    <a href="{{ route('admin.clients.products', $client->id) }}" class="btn btn-sm btn-info" title="المنتجات">
-                                        <i class="ri-shopping-bag-line"></i>
-                                    </a>
-                                    @if($client->status != 'active')
-                                    <button type="button" class="btn btn-sm btn-success activate-client" data-id="{{ $client->id }}" data-name="{{ $client->name }}" title="تفعيل">
-                                        <i class="ri-check-line"></i>
-                                    </button>
-                                    @endif
-                                    @if($client->status != 'banned')
-                                    <button type="button" class="btn btn-sm btn-danger ban-client" data-id="{{ $client->id }}" data-name="{{ $client->name }}" title="حظر">
-                                        <i class="ri-close-line"></i>
-                                    </button>
-                                    @endif
-                                    @if($client->status != 'pending')
-                                    <button type="button" class="btn btn-sm btn-warning pending-client" data-id="{{ $client->id }}" data-name="{{ $client->name }}" title="وضع في الانتظار">
-                                        <i class="ri-time-line"></i>
-                                    </button>
-                                    @endif
-                                    @if($client->status != 'expired')
-                                    <button type="button" class="btn btn-sm btn-info expire-client" data-id="{{ $client->id }}" data-name="{{ $client->name }}" title="انتهى الاشتراك">
-                                        <i class="ri-calendar-close-line"></i>
-                                    </button>
-                                    @endif
-                                </div>
-                            </td>
-                        </tr>
-                        @endforeach
+                        <!-- Data will be loaded via AJAX -->
                     </tbody>
                 </table>
             </div>
@@ -128,7 +50,7 @@
             </div>
             <form id="activate-client-form">
                 @csrf
-                <input type="hidden" id="activate_client_id" name="client_id">
+                <input type="hidden" id="activate_client_firebase_uid" name="firebase_uid">
                 <div class="modal-body">
                     <p id="activate_client_name" class="mb-3"></p>
                     <div class="mb-3">
@@ -156,7 +78,7 @@
             </div>
             <form id="confirm-status-form">
                 @csrf
-                <input type="hidden" id="confirm_client_id" name="client_id">
+                <input type="hidden" id="confirm_client_firebase_uid" name="firebase_uid">
                 <input type="hidden" id="confirm_status" name="status">
                 <div class="modal-body">
                     <p id="confirm_message"></p>
@@ -181,81 +103,103 @@
         const activateModal = new bootstrap.Modal(document.getElementById('activateClientModal'));
         const confirmModal = new bootstrap.Modal(document.getElementById('confirmStatusModal'));
 
-        // Initialize DataTable
+        // Initialize DataTable with AJAX
         const dataTable = new DataTable(tableElement, {
             language: {
                 url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/ar.json'
             },
+            processing: true,
+            serverSide: false,
+            ajax: {
+                url: '{{ route("admin.clients.data") }}',
+                type: 'GET',
+            },
+            columns: [
+                { data: 'name', name: 'name' },
+                { data: 'email', name: 'email' },
+                { data: 'phone', name: 'phone' },
+                { data: 'provider', name: 'provider', orderable: false },
+                { data: 'status', name: 'status', orderable: false },
+                { data: 'activation_expires_at', name: 'activation_expires_at', orderable: false },
+                { data: 'last_login_at', name: 'last_login_at', orderable: false },
+                { data: 'created_at', name: 'created_at' },
+                { data: 'actions', name: 'actions', orderable: false, searchable: false }
+            ],
             order: [[7, 'desc']], // Order by created_at descending
             pageLength: 10,
             responsive: true,
             dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rt<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
         });
 
-        // Activate Client
-        tableElement.addEventListener('click', function(e) {
-            if (e.target.closest('.activate-client')) {
-                const btn = e.target.closest('.activate-client');
-                const clientId = btn.dataset.id;
-                const clientName = btn.dataset.name;
+        // Add action buttons column
+        dataTable.on('draw', function() {
+            // Activate Client
+            document.querySelectorAll('.activate-client').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const firebaseUid = this.dataset.firebaseUid;
+                    const clientName = this.dataset.name;
 
-                document.getElementById('activate_client_id').value = clientId;
-                document.getElementById('activate_client_name').textContent = `هل تريد تفعيل العميل: ${clientName}؟`;
-                document.getElementById('activation_months').value = 1;
-                activateModal.show();
-            }
+                    document.getElementById('activate_client_firebase_uid').value = firebaseUid;
+                    document.getElementById('activate_client_name').textContent = `هل تريد تفعيل العميل: ${clientName}؟`;
+                    document.getElementById('activation_months').value = 1;
+                    activateModal.show();
+                });
+            });
 
             // Ban Client
-            if (e.target.closest('.ban-client')) {
-                const btn = e.target.closest('.ban-client');
-                const clientId = btn.dataset.id;
-                const clientName = btn.dataset.name;
+            document.querySelectorAll('.ban-client').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const firebaseUid = this.dataset.firebaseUid;
+                    const clientName = this.dataset.name;
 
-                document.getElementById('confirm_client_id').value = clientId;
-                document.getElementById('confirm_status').value = 'banned';
-                document.getElementById('confirm_message').textContent = `هل أنت متأكد من حظر العميل: ${clientName}؟`;
-                document.getElementById('confirm_btn').className = 'btn btn-danger';
-                document.getElementById('confirm_btn').textContent = 'حظر';
-                confirmModal.show();
-            }
+                    document.getElementById('confirm_client_firebase_uid').value = firebaseUid;
+                    document.getElementById('confirm_status').value = 'banned';
+                    document.getElementById('confirm_message').textContent = `هل أنت متأكد من حظر العميل: ${clientName}؟`;
+                    document.getElementById('confirm_btn').className = 'btn btn-danger';
+                    document.getElementById('confirm_btn').textContent = 'حظر';
+                    confirmModal.show();
+                });
+            });
 
             // Set Pending
-            if (e.target.closest('.pending-client')) {
-                const btn = e.target.closest('.pending-client');
-                const clientId = btn.dataset.id;
-                const clientName = btn.dataset.name;
+            document.querySelectorAll('.pending-client').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const firebaseUid = this.dataset.firebaseUid;
+                    const clientName = this.dataset.name;
 
-                document.getElementById('confirm_client_id').value = clientId;
-                document.getElementById('confirm_status').value = 'pending';
-                document.getElementById('confirm_message').textContent = `هل تريد وضع العميل: ${clientName} في قائمة الانتظار؟`;
-                document.getElementById('confirm_btn').className = 'btn btn-warning';
-                document.getElementById('confirm_btn').textContent = 'وضع في الانتظار';
-                confirmModal.show();
-            }
+                    document.getElementById('confirm_client_firebase_uid').value = firebaseUid;
+                    document.getElementById('confirm_status').value = 'pending';
+                    document.getElementById('confirm_message').textContent = `هل تريد وضع العميل: ${clientName} في قائمة الانتظار؟`;
+                    document.getElementById('confirm_btn').className = 'btn btn-warning';
+                    document.getElementById('confirm_btn').textContent = 'وضع في الانتظار';
+                    confirmModal.show();
+                });
+            });
 
             // Set Expired
-            if (e.target.closest('.expire-client')) {
-                const btn = e.target.closest('.expire-client');
-                const clientId = btn.dataset.id;
-                const clientName = btn.dataset.name;
+            document.querySelectorAll('.expire-client').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const firebaseUid = this.dataset.firebaseUid;
+                    const clientName = this.dataset.name;
 
-                document.getElementById('confirm_client_id').value = clientId;
-                document.getElementById('confirm_status').value = 'expired';
-                document.getElementById('confirm_message').textContent = `هل تريد تعيين حالة العميل: ${clientName} كأنهاء اشتراك؟`;
-                document.getElementById('confirm_btn').className = 'btn btn-info';
-                document.getElementById('confirm_btn').textContent = 'انتهى الاشتراك';
-                confirmModal.show();
-            }
+                    document.getElementById('confirm_client_firebase_uid').value = firebaseUid;
+                    document.getElementById('confirm_status').value = 'expired';
+                    document.getElementById('confirm_message').textContent = `هل تريد تعيين حالة العميل: ${clientName} كأنهاء اشتراك؟`;
+                    document.getElementById('confirm_btn').className = 'btn btn-info';
+                    document.getElementById('confirm_btn').textContent = 'انتهى الاشتراك';
+                    confirmModal.show();
+                });
+            });
         });
 
         // Activate Form Submit
         document.getElementById('activate-client-form').addEventListener('submit', function(e) {
             e.preventDefault();
 
-            const clientId = document.getElementById('activate_client_id').value;
+            const firebaseUid = document.getElementById('activate_client_firebase_uid').value;
             const months = document.getElementById('activation_months').value;
 
-            fetch(`/admin/clients/${clientId}/status`, {
+            fetch(`/admin/clients/${firebaseUid}/status`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -271,7 +215,7 @@
             .then(data => {
                 if (data.success) {
                     Swal.fire('نجاح!', data.message, 'success').then(() => {
-                        location.reload();
+                        dataTable.ajax.reload();
                     });
                 } else {
                     Swal.fire('خطأ!', data.message || 'حدث خطأ ما', 'error');
@@ -290,10 +234,10 @@
         document.getElementById('confirm-status-form').addEventListener('submit', function(e) {
             e.preventDefault();
 
-            const clientId = document.getElementById('confirm_client_id').value;
+            const firebaseUid = document.getElementById('confirm_client_firebase_uid').value;
             const status = document.getElementById('confirm_status').value;
 
-            fetch(`/admin/clients/${clientId}/status`, {
+            fetch(`/admin/clients/${firebaseUid}/status`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -308,7 +252,7 @@
             .then(data => {
                 if (data.success) {
                     Swal.fire('نجاح!', data.message, 'success').then(() => {
-                        location.reload();
+                        dataTable.ajax.reload();
                     });
                 } else {
                     Swal.fire('خطأ!', data.message || 'حدث خطأ ما', 'error');
