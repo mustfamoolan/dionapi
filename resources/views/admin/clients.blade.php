@@ -64,6 +64,8 @@
                                     <span class="badge bg-warning">في الانتظار</span>
                                 @elseif($client->status == 'banned')
                                     <span class="badge bg-danger">محظور</span>
+                                @elseif($client->status == 'expired')
+                                    <span class="badge bg-info">انتهى الاشتراك</span>
                                 @else
                                     <span class="badge bg-secondary">{{ $client->status }}</span>
                                 @endif
@@ -98,6 +100,11 @@
                                     @if($client->status != 'pending')
                                     <button type="button" class="btn btn-sm btn-warning pending-client" data-id="{{ $client->id }}" data-name="{{ $client->name }}" title="وضع في الانتظار">
                                         <i class="ri-time-line"></i>
+                                    </button>
+                                    @endif
+                                    @if($client->status != 'expired')
+                                    <button type="button" class="btn btn-sm btn-info expire-client" data-id="{{ $client->id }}" data-name="{{ $client->name }}" title="انتهى الاشتراك">
+                                        <i class="ri-calendar-close-line"></i>
                                     </button>
                                     @endif
                                 </div>
@@ -223,6 +230,20 @@
                 document.getElementById('confirm_message').textContent = `هل تريد وضع العميل: ${clientName} في قائمة الانتظار؟`;
                 document.getElementById('confirm_btn').className = 'btn btn-warning';
                 document.getElementById('confirm_btn').textContent = 'وضع في الانتظار';
+                confirmModal.show();
+            }
+
+            // Set Expired
+            if (e.target.closest('.expire-client')) {
+                const btn = e.target.closest('.expire-client');
+                const clientId = btn.dataset.id;
+                const clientName = btn.dataset.name;
+
+                document.getElementById('confirm_client_id').value = clientId;
+                document.getElementById('confirm_status').value = 'expired';
+                document.getElementById('confirm_message').textContent = `هل تريد تعيين حالة العميل: ${clientName} كأنهاء اشتراك؟`;
+                document.getElementById('confirm_btn').className = 'btn btn-info';
+                document.getElementById('confirm_btn').textContent = 'انتهى الاشتراك';
                 confirmModal.show();
             }
         });

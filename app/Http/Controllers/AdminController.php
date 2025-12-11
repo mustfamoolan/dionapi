@@ -264,7 +264,7 @@ class AdminController extends Controller
     public function updateClientStatus(Request $request, $id)
     {
         $request->validate([
-            'status' => 'required|in:pending,active,banned',
+            'status' => 'required|in:pending,active,banned,expired',
             'months' => 'required_if:status,active|integer|min:1|max:120',
         ]);
 
@@ -291,6 +291,12 @@ class AdminController extends Controller
                 $message = 'تم وضع العميل في قائمة الانتظار بنجاح';
                 $notificationTitle = 'تغيير حالة الحساب';
                 $notificationBody = 'تم وضع حسابك في قائمة الانتظار. يرجى انتظار التفعيل من الإدارة.';
+                break;
+            case 'expired':
+                $client->setExpired();
+                $message = 'تم تعيين حالة العميل كأنهاء اشتراك بنجاح';
+                $notificationTitle = 'انتهت مدة اشتراكك';
+                $notificationBody = 'انتهت مدة اشتراكك. يرجى تجديد الاشتراك للاستمرار في استخدام التطبيق.';
                 break;
             default:
                 return response()->json([
@@ -324,6 +330,7 @@ class AdminController extends Controller
             'pending' => '<span class="badge bg-warning">في الانتظار</span>',
             'active' => '<span class="badge bg-success">مفعل</span>',
             'banned' => '<span class="badge bg-danger">محظور</span>',
+            'expired' => '<span class="badge bg-info">انتهى الاشتراك</span>',
         ];
 
         return $badges[$status] ?? '<span class="badge bg-secondary">' . $status . '</span>';

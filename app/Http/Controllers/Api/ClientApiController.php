@@ -133,6 +133,13 @@ class ClientApiController extends Controller
                 ], 403);
             }
 
+            if ($client->isExpired()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'انتهت مدة اشتراكك. يرجى تجديد الاشتراك.'
+                ], 403);
+            }
+
             if (!$client->isActive()) {
                 return response()->json([
                     'success' => false,
@@ -335,17 +342,18 @@ class ClientApiController extends Controller
                 ], 401);
             }
 
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'status' => $client->status,
-                    'activation_expires_at' => $client->activation_expires_at,
-                    'is_expired' => $client->isActivationExpired(),
-                    'is_active' => $client->isActive(),
-                    'is_pending' => $client->isPending(),
-                    'is_banned' => $client->isBanned(),
-                ]
-            ], 200);
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'status' => $client->status,
+                'activation_expires_at' => $client->activation_expires_at,
+                'is_expired' => $client->isExpired() || $client->isActivationExpired(),
+                'is_active' => $client->isActive(),
+                'is_pending' => $client->isPending(),
+                'is_banned' => $client->isBanned(),
+                'is_subscription_expired' => $client->isExpired(),
+            ]
+        ], 200);
         } catch (\Exception $e) {
             \Log::error('Get status error: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()

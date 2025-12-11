@@ -84,6 +84,16 @@ class Client extends Model
     }
 
     /**
+     * Check if client subscription is expired
+     *
+     * @return bool
+     */
+    public function isExpired(): bool
+    {
+        return $this->status === 'expired';
+    }
+
+    /**
      * Check if activation is expired
      *
      * @return bool
@@ -133,6 +143,18 @@ class Client extends Model
         return $this->update([
             'status' => 'pending',
             'activation_expires_at' => null,
+        ]);
+    }
+
+    /**
+     * Set client to expired
+     *
+     * @return bool
+     */
+    public function setExpired(): bool
+    {
+        return $this->update([
+            'status' => 'expired',
         ]);
     }
 
