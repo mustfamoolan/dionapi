@@ -32,6 +32,7 @@ Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function ()
     // Clients API routes
     Route::get('/clients/data', [AdminController::class, 'getClients'])->name('clients.data');
     Route::get('/clients/{firebaseUid}', [AdminController::class, 'getClient'])->name('clients.get');
+    Route::put('/clients/{firebaseUid}', [AdminController::class, 'updateClient'])->name('clients.update');
     Route::put('/clients/{firebaseUid}/status', [AdminController::class, 'updateClientStatus'])->name('clients.updateStatus');
 });
 

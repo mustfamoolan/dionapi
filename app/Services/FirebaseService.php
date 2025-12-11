@@ -414,6 +414,9 @@ class FirebaseService
             'name' => $data['name'] ?? '',
             'email' => $data['email'] ?? '',
             'phone' => $data['phone'] ?? null,
+            'address' => $data['address'] ?? null,
+            'governorate' => $data['governorate'] ?? null,
+            'city' => $data['city'] ?? null,
             'photo_url' => $data['photo_url'] ?? null,
             'provider' => $data['provider'] ?? 'google',
             'provider_id' => $data['provider_id'] ?? null,
@@ -425,6 +428,39 @@ class FirebaseService
             'created_at' => $this->convertTimestamp($data['created_at'] ?? null),
             'updated_at' => $this->convertTimestamp($data['updated_at'] ?? null),
         ];
+    }
+
+    /**
+     * Update client data (general update method)
+     */
+    public function updateClientData(string $firebaseUid, array $data): bool
+    {
+        try {
+            $updateData = [
+                'updated_at' => new \DateTime(),
+            ];
+
+            // Check if status or is_active is being changed
+            $statusChanged = isset($data['status']);
+            $isActiveChanged = isset($data['is_active']);
+
+            // Merge all data
+            foreach ($data as $key => $value) {
+                if (in_array($key, ['name', 'phone', 'address', 'governorate', 'city', 'status', 'is_active', 'activation_expires_at'])) {
+                    $updateData[$key] = $value;
+                }
+            }
+
+            // Update last_status_change_at if status or is_active changed
+            if ($statusChanged || $isActiveChanged) {
+                $updateData['last_status_change_at'] = new \DateTime();
+            }
+
+            return $this->updateDocument($firebaseUid, $updateData);
+        } catch (\Exception $e) {
+            Log::error('Error updating client data in Firestore: ' . $e->getMessage());
+            return false;
+        }
     }
 
     /**

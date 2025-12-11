@@ -240,9 +240,13 @@ class AdminController extends Controller
                     </div>',
                     'email' => $client['email'],
                     'phone' => $client['phone'] ?? '-',
+                    'address' => $client['address'] ?? '-',
+                    'governorate' => $client['governorate'] ?? '-',
+                    'city' => $client['city'] ?? '-',
                     'provider' => $this->getProviderBadge($client['provider']),
                     'status' => $this->getStatusBadge($status),
                     'status_value' => $status,
+                    'is_active' => $client['is_active'] ? '<span class="badge bg-success">نعم</span>' : '<span class="badge bg-danger">لا</span>',
                     'activation_expires_at' => $client['activation_expires_at'] ? (is_int($client['activation_expires_at']) ? date('Y-m-d', $client['activation_expires_at']) : $client['activation_expires_at']->format('Y-m-d')) : '-',
                     'last_login_at' => $client['last_login_at'] ? (is_int($client['last_login_at']) ? date('Y-m-d H:i', $client['last_login_at']) : $client['last_login_at']->format('Y-m-d H:i')) : '-',
                     'created_at' => $client['created_at'] ? (is_int($client['created_at']) ? date('Y-m-d', $client['created_at']) : $client['created_at']->format('Y-m-d')) : '-',
@@ -272,7 +276,10 @@ class AdminController extends Controller
                 'firebase_uid' => $client['firebase_uid'],
                 'name' => $client['name'],
                 'email' => $client['email'],
-                'phone' => $client['phone'],
+                'phone' => $client['phone'] ?? '',
+                'address' => $client['address'] ?? '',
+                'governorate' => $client['governorate'] ?? '',
+                'city' => $client['city'] ?? '',
                 'status' => $client['status'],
                 'is_active' => $client['is_active'],
                 'activation_expires_at' => $client['activation_expires_at'] ? (is_int($client['activation_expires_at']) ? date('Y-m-d', $client['activation_expires_at']) : $client['activation_expires_at']->format('Y-m-d')) : null,
@@ -293,8 +300,8 @@ class AdminController extends Controller
         $client = $this->firebaseService->getClient($firebaseUid);
 
         if (!$client) {
-            return response()->json([
-                'success' => false,
+                return response()->json([
+                    'success' => false,
                 'message' => 'العميل غير موجود'
             ], 404);
         }
@@ -348,6 +355,101 @@ class AdminController extends Controller
 
 
     /**
+     * Update client data
+     */
+    public function updateClient(Request $request, $firebaseUid)
+    {
+        $request->validate([
+            'name' => 'nullable|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'address' => 'nullable|string|max:500',
+            'governorate' => 'nullable|string|max:100',
+            'city' => 'nullable|string|max:100',
+            'status' => 'nullable|in:pending,active,banned,expired',
+            'is_active' => 'nullable|boolean',
+            'activation_expires_at' => 'nullable|date',
+        ]);
+
+        $client = $this->firebaseService->getClient($firebaseUid);
+
+        if (!$client) {
+            return response()->json([
+                'success' => false,
+                'message' => 'العميل غير موجود'
+            ], 404);
+        }
+
+        $updateData = [];
+
+        if ($request->has('name')) {
+            $updateData['name'] = $request->name;
+        }
+        if ($request->has('phone')) {
+            $updateData['phone'] = $request->phone ?: null;
+        }
+        if ($request->has('address')) {
+            $updateData['address'] = $request->address ?: null;
+        }
+        if ($request->has('governorate')) {
+            $updateData['governorate'] = $request->governorate ?: null;
+        }
+        if ($request->has('city')) {
+            $updateData['city'] = $request->city ?: null;
+        }
+        if ($request->has('status')) {
+            $updateData['status'] = $request->status;
+        }
+        if ($request->has('is_active')) {
+            $updateData['is_active'] = (bool) $request->is_active;
+        }
+        if ($request->has('activation_expires_at') && $request->activation_expires_at) {
+            try {
+                $updateData['activation_expires_at'] = new \DateTime($request->activation_expires_at);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'تاريخ انتهاء التفعيل غير صحيح'
+                ], 422);
+            }
+        }
+
+        if (empty($updateData)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'لم يتم إرسال أي بيانات للتحديث'
+            ], 422);
+        }
+
+        $success = $this->firebaseService->updateClientData($firebaseUid, $updateData);
+
+        if (!$success) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء تحديث بيانات العميل'
+            ], 500);
+        }
+
+        $updatedClient = $this->firebaseService->getClient($firebaseUid);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم تحديث بيانات العميل بنجاح',
+            'client' => [
+                'firebase_uid' => $updatedClient['firebase_uid'],
+                'name' => $updatedClient['name'],
+                'email' => $updatedClient['email'],
+                'phone' => $updatedClient['phone'] ?? '',
+                'address' => $updatedClient['address'] ?? '',
+                'governorate' => $updatedClient['governorate'] ?? '',
+                'city' => $updatedClient['city'] ?? '',
+                'status' => $updatedClient['status'],
+                'is_active' => $updatedClient['is_active'],
+                'activation_expires_at' => $updatedClient['activation_expires_at'] ? (is_int($updatedClient['activation_expires_at']) ? date('Y-m-d', $updatedClient['activation_expires_at']) : $updatedClient['activation_expires_at']->format('Y-m-d')) : null,
+            ]
+        ]);
+    }
+
+    /**
      * Get provider badge HTML
      */
     private function getProviderBadge($provider)
@@ -367,6 +469,10 @@ class AdminController extends Controller
     private function getClientActionButtons($firebaseUid, $clientName, $status)
     {
         $buttons = '<div class="hstack gap-2">';
+
+        $buttons .= '<button type="button" class="btn btn-sm btn-primary edit-client" data-firebase-uid="' . $firebaseUid . '" title="تعديل">
+            <i class="ri-edit-2-line"></i>
+        </button>';
 
         if ($status != 'active') {
             $buttons .= '<button type="button" class="btn btn-sm btn-success activate-client" data-firebase-uid="' . $firebaseUid . '" data-name="' . htmlspecialchars($clientName) . '" title="تفعيل">
