@@ -387,6 +387,7 @@ class AdminController extends Controller
             ], 404);
         }
 
+        $oldStatus = $client['status'];
         $updateData = [];
 
         if ($request->has('name')) {
@@ -435,6 +436,11 @@ class AdminController extends Controller
                 'success' => false,
                 'message' => 'حدث خطأ أثناء تحديث بيانات العميل'
             ], 500);
+        }
+
+        // Send FCM notification if status changed
+        if (isset($updateData['status']) && $oldStatus !== $updateData['status']) {
+            $this->sendStatusChangeNotification($firebaseUid, $updateData['status'], null);
         }
 
         $updatedClient = $this->firebaseService->getClient($firebaseUid);
@@ -578,12 +584,27 @@ class AdminController extends Controller
             }
 
             if (!empty($notification) && !empty($data['type'])) {
-                $this->notificationService->sendToUser($firebaseUid, $notification, $data);
+                $result = $this->notificationService->sendToUser($firebaseUid, $notification, $data);
+                
+                if ($result && $result['success']) {
+                    Log::info('Status change notification sent successfully', [
+                        'firebase_uid' => $firebaseUid,
+                        'status' => $status,
+                        'sent' => $result['sent'] ?? 0,
+                    ]);
+                } else {
+                    Log::warning('Status change notification failed', [
+                        'firebase_uid' => $firebaseUid,
+                        'status' => $status,
+                        'message' => $result['message'] ?? 'Unknown error',
+                    ]);
+                }
             }
         } catch (\Exception $e) {
             Log::error('Error sending status change notification: ' . $e->getMessage(), [
                 'firebase_uid' => $firebaseUid,
                 'status' => $status,
+                'trace' => $e->getTraceAsString(),
             ]);
         }
     }

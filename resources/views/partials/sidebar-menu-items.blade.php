@@ -19,6 +19,12 @@
         </a>
     </li>
     <li class="slide">
+        <a href="{{ route('admin.notifications') }}" class="side-menu__item" role="menuitem">
+            <span class="side_menu_icon"><i class="ri-notification-line"></i></span>
+            <span class="side-menu__label">الإشعارات</span>
+        </a>
+    </li>
+    <li class="slide">
         <a href="{{ route('admin.settings') }}" class="side-menu__item" role="menuitem">
             <span class="side_menu_icon"><i class="ri-settings-line"></i></span>
             <span class="side-menu__label">الإعدادات</span>
