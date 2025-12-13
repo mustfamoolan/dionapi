@@ -166,14 +166,14 @@
 <script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const tableElement = document.getElementById('clients-table');
+    $(document).ready(function() {
+        const tableElement = $('#clients-table');
         const editModal = new bootstrap.Modal(document.getElementById('editClientModal'));
         const activateModal = new bootstrap.Modal(document.getElementById('activateClientModal'));
         const confirmModal = new bootstrap.Modal(document.getElementById('confirmStatusModal'));
 
         // Initialize DataTable with AJAX
-        const dataTable = new DataTable(tableElement, {
+        const dataTable = tableElement.DataTable({
             language: {
                 url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/ar.json'
             },
@@ -204,223 +204,209 @@
             dom: '<"row"<"col-sm-12 col-md-6"l><"col-sm-12 col-md-6"f>>rt<"row"<"col-sm-12 col-md-5"i><"col-sm-12 col-md-7"p>>',
         });
 
-        // Add action buttons column
-        dataTable.on('draw', function() {
-            // Edit Client
-            document.querySelectorAll('.edit-client').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const firebaseUid = this.dataset.firebaseUid;
-                    loadClientData(firebaseUid);
-                });
-            });
+        // Use jQuery event delegation for action buttons (works with dynamically loaded content)
+        $(document).on('click', '.edit-client', function(e) {
+            e.preventDefault();
+            const firebaseUid = $(this).data('firebase-uid');
+            loadClientData(firebaseUid);
+        });
 
-            // Activate Client
-            document.querySelectorAll('.activate-client').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const firebaseUid = this.dataset.firebaseUid;
-                    const clientName = this.dataset.name;
+        $(document).on('click', '.activate-client', function(e) {
+            e.preventDefault();
+            const firebaseUid = $(this).data('firebase-uid');
+            const clientName = $(this).data('name');
 
-                    document.getElementById('activate_client_firebase_uid').value = firebaseUid;
-                    document.getElementById('activate_client_name').textContent = `هل تريد تفعيل العميل: ${clientName}؟`;
-                    document.getElementById('activation_months').value = 1;
-                    activateModal.show();
-                });
-            });
+            $('#activate_client_firebase_uid').val(firebaseUid);
+            $('#activate_client_name').text(`هل تريد تفعيل العميل: ${clientName}؟`);
+            $('#activation_months').val(1);
+            activateModal.show();
+        });
 
-            // Ban Client
-            document.querySelectorAll('.ban-client').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const firebaseUid = this.dataset.firebaseUid;
-                    const clientName = this.dataset.name;
+        $(document).on('click', '.ban-client', function(e) {
+            e.preventDefault();
+            const firebaseUid = $(this).data('firebase-uid');
+            const clientName = $(this).data('name');
 
-                    document.getElementById('confirm_client_firebase_uid').value = firebaseUid;
-                    document.getElementById('confirm_status').value = 'banned';
-                    document.getElementById('confirm_message').textContent = `هل أنت متأكد من حظر العميل: ${clientName}؟`;
-                    document.getElementById('confirm_btn').className = 'btn btn-danger';
-                    document.getElementById('confirm_btn').textContent = 'حظر';
-                    confirmModal.show();
-                });
-            });
+            $('#confirm_client_firebase_uid').val(firebaseUid);
+            $('#confirm_status').val('banned');
+            $('#confirm_message').text(`هل أنت متأكد من حظر العميل: ${clientName}؟`);
+            $('#confirm_btn').removeClass().addClass('btn btn-danger').text('حظر');
+            confirmModal.show();
+        });
 
-            // Set Pending
-            document.querySelectorAll('.pending-client').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const firebaseUid = this.dataset.firebaseUid;
-                    const clientName = this.dataset.name;
+        $(document).on('click', '.pending-client', function(e) {
+            e.preventDefault();
+            const firebaseUid = $(this).data('firebase-uid');
+            const clientName = $(this).data('name');
 
-                    document.getElementById('confirm_client_firebase_uid').value = firebaseUid;
-                    document.getElementById('confirm_status').value = 'pending';
-                    document.getElementById('confirm_message').textContent = `هل تريد وضع العميل: ${clientName} في قائمة الانتظار؟`;
-                    document.getElementById('confirm_btn').className = 'btn btn-warning';
-                    document.getElementById('confirm_btn').textContent = 'وضع في الانتظار';
-                    confirmModal.show();
-                });
-            });
+            $('#confirm_client_firebase_uid').val(firebaseUid);
+            $('#confirm_status').val('pending');
+            $('#confirm_message').text(`هل تريد وضع العميل: ${clientName} في قائمة الانتظار؟`);
+            $('#confirm_btn').removeClass().addClass('btn btn-warning').text('وضع في الانتظار');
+            confirmModal.show();
+        });
 
-            // Set Expired
-            document.querySelectorAll('.expire-client').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const firebaseUid = this.dataset.firebaseUid;
-                    const clientName = this.dataset.name;
+        $(document).on('click', '.expire-client', function(e) {
+            e.preventDefault();
+            const firebaseUid = $(this).data('firebase-uid');
+            const clientName = $(this).data('name');
 
-                    document.getElementById('confirm_client_firebase_uid').value = firebaseUid;
-                    document.getElementById('confirm_status').value = 'expired';
-                    document.getElementById('confirm_message').textContent = `هل تريد تعيين حالة العميل: ${clientName} كأنهاء اشتراك؟`;
-                    document.getElementById('confirm_btn').className = 'btn btn-info';
-                    document.getElementById('confirm_btn').textContent = 'انتهى الاشتراك';
-                    confirmModal.show();
-                });
-            });
+            $('#confirm_client_firebase_uid').val(firebaseUid);
+            $('#confirm_status').val('expired');
+            $('#confirm_message').text(`هل تريد تعيين حالة العميل: ${clientName} كأنهاء اشتراك؟`);
+            $('#confirm_btn').removeClass().addClass('btn btn-info').text('انتهى الاشتراك');
+            confirmModal.show();
         });
 
         // Load client data for editing
         function loadClientData(firebaseUid) {
-            fetch(`/admin/clients/${firebaseUid}`, {
+            $.ajax({
+                url: `/admin/clients/${firebaseUid}`,
+                method: 'GET',
                 headers: {
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                success: function(data) {
+                    if (data.success) {
+                        const client = data.client;
+                        $('#edit_client_firebase_uid').val(client.firebase_uid);
+                        $('#edit_name').val(client.name || '');
+                        $('#edit_phone').val(client.phone || '');
+                        $('#edit_address').val(client.address || '');
+                        $('#edit_governorate').val(client.governorate || '');
+                        $('#edit_city').val(client.city || '');
+                        $('#edit_status').val(client.status || 'pending');
+                        $('#edit_is_active').val(client.is_active ? '1' : '0');
+                        $('#edit_activation_expires_at').val(client.activation_expires_at || '');
+                        editModal.show();
+                    } else {
+                        Swal.fire('خطأ!', data.message || 'حدث خطأ ما', 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error:', error);
+                    Swal.fire('خطأ!', 'حدث خطأ أثناء جلب بيانات العميل', 'error');
                 }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const client = data.client;
-                    document.getElementById('edit_client_firebase_uid').value = client.firebase_uid;
-                    document.getElementById('edit_name').value = client.name || '';
-                    document.getElementById('edit_phone').value = client.phone || '';
-                    document.getElementById('edit_address').value = client.address || '';
-                    document.getElementById('edit_governorate').value = client.governorate || '';
-                    document.getElementById('edit_city').value = client.city || '';
-                    document.getElementById('edit_status').value = client.status || 'pending';
-                    document.getElementById('edit_is_active').value = client.is_active ? '1' : '0';
-                    document.getElementById('edit_activation_expires_at').value = client.activation_expires_at || '';
-                    editModal.show();
-                } else {
-                    Swal.fire('خطأ!', data.message || 'حدث خطأ ما', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                Swal.fire('خطأ!', 'حدث خطأ أثناء جلب بيانات العميل', 'error');
             });
         }
 
         // Edit Form Submit
-        document.getElementById('edit-client-form').addEventListener('submit', function(e) {
+        $('#edit-client-form').on('submit', function(e) {
             e.preventDefault();
 
-            const firebaseUid = document.getElementById('edit_client_firebase_uid').value;
+            const firebaseUid = $('#edit_client_firebase_uid').val();
             const formData = {
-                name: document.getElementById('edit_name').value,
-                phone: document.getElementById('edit_phone').value,
-                address: document.getElementById('edit_address').value,
-                governorate: document.getElementById('edit_governorate').value,
-                city: document.getElementById('edit_city').value,
-                status: document.getElementById('edit_status').value,
-                is_active: document.getElementById('edit_is_active').value === '1',
-                activation_expires_at: document.getElementById('edit_activation_expires_at').value || null,
+                name: $('#edit_name').val(),
+                phone: $('#edit_phone').val(),
+                address: $('#edit_address').val(),
+                governorate: $('#edit_governorate').val(),
+                city: $('#edit_city').val(),
+                status: $('#edit_status').val(),
+                is_active: $('#edit_is_active').val() === '1',
+                activation_expires_at: $('#edit_activation_expires_at').val() || null,
             };
 
-            fetch(`/admin/clients/${firebaseUid}`, {
+            $.ajax({
+                url: `/admin/clients/${firebaseUid}`,
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify(formData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    Swal.fire('نجاح!', data.message, 'success').then(() => {
-                        dataTable.ajax.reload();
-                    });
-                } else {
-                    Swal.fire('خطأ!', data.message || 'حدث خطأ ما', 'error');
+                data: JSON.stringify(formData),
+                success: function(data) {
+                    if (data.success) {
+                        Swal.fire('نجاح!', data.message, 'success').then(() => {
+                            dataTable.ajax.reload(null, false);
+                        });
+                    } else {
+                        Swal.fire('خطأ!', data.message || 'حدث خطأ ما', 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error:', error);
+                    Swal.fire('خطأ!', 'حدث خطأ أثناء تحديث البيانات', 'error');
+                },
+                complete: function() {
+                    editModal.hide();
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                Swal.fire('خطأ!', 'حدث خطأ أثناء تحديث البيانات', 'error');
-            })
-            .finally(() => {
-                editModal.hide();
             });
         });
 
         // Activate Form Submit
-        document.getElementById('activate-client-form').addEventListener('submit', function(e) {
+        $('#activate-client-form').on('submit', function(e) {
             e.preventDefault();
 
-            const firebaseUid = document.getElementById('activate_client_firebase_uid').value;
-            const months = document.getElementById('activation_months').value;
+            const firebaseUid = $('#activate_client_firebase_uid').val();
+            const months = $('#activation_months').val();
 
-            fetch(`/admin/clients/${firebaseUid}/status`, {
+            $.ajax({
+                url: `/admin/clients/${firebaseUid}/status`,
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({
+                data: JSON.stringify({
                     status: 'active',
                     months: parseInt(months)
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    Swal.fire('نجاح!', data.message, 'success').then(() => {
-                        dataTable.ajax.reload();
-                    });
-                } else {
-                    Swal.fire('خطأ!', data.message || 'حدث خطأ ما', 'error');
+                }),
+                success: function(data) {
+                    if (data.success) {
+                        Swal.fire('نجاح!', data.message, 'success').then(() => {
+                            dataTable.ajax.reload(null, false);
+                        });
+                    } else {
+                        Swal.fire('خطأ!', data.message || 'حدث خطأ ما', 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error:', error);
+                    Swal.fire('خطأ!', 'حدث خطأ أثناء التفعيل', 'error');
+                },
+                complete: function() {
+                    activateModal.hide();
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                Swal.fire('خطأ!', 'حدث خطأ أثناء التفعيل', 'error');
-            })
-            .finally(() => {
-                activateModal.hide();
             });
         });
 
         // Confirm Status Form Submit
-        document.getElementById('confirm-status-form').addEventListener('submit', function(e) {
+        $('#confirm-status-form').on('submit', function(e) {
             e.preventDefault();
 
-            const firebaseUid = document.getElementById('confirm_client_firebase_uid').value;
-            const status = document.getElementById('confirm_status').value;
+            const firebaseUid = $('#confirm_client_firebase_uid').val();
+            const status = $('#confirm_status').val();
 
-            fetch(`/admin/clients/${firebaseUid}/status`, {
+            $.ajax({
+                url: `/admin/clients/${firebaseUid}/status`,
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({
+                data: JSON.stringify({
                     status: status
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    Swal.fire('نجاح!', data.message, 'success').then(() => {
-                        dataTable.ajax.reload();
-                    });
-                } else {
-                    Swal.fire('خطأ!', data.message || 'حدث خطأ ما', 'error');
+                }),
+                success: function(data) {
+                    if (data.success) {
+                        Swal.fire('نجاح!', data.message, 'success').then(() => {
+                            dataTable.ajax.reload(null, false);
+                        });
+                    } else {
+                        Swal.fire('خطأ!', data.message || 'حدث خطأ ما', 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Error:', error);
+                    Swal.fire('خطأ!', 'حدث خطأ أثناء تغيير الحالة', 'error');
+                },
+                complete: function() {
+                    confirmModal.hide();
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                Swal.fire('خطأ!', 'حدث خطأ أثناء تغيير الحالة', 'error');
-            })
-            .finally(() => {
-                confirmModal.hide();
             });
         });
 

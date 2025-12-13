@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Services\FirebaseService;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
@@ -13,10 +14,12 @@ use Illuminate\Support\Facades\Log;
 class AdminController extends Controller
 {
     protected $firebaseService;
+    protected $notificationService;
 
-    public function __construct(FirebaseService $firebaseService)
+    public function __construct(FirebaseService $firebaseService, NotificationService $notificationService)
     {
         $this->firebaseService = $firebaseService;
+        $this->notificationService = $notificationService;
     }
 
     /**
@@ -318,6 +321,11 @@ class AdminController extends Controller
             ], 500);
         }
 
+        // Send FCM notification based on status change
+        if ($oldStatus !== $request->status) {
+            $this->sendStatusChangeNotification($firebaseUid, $request->status, $months);
+        }
+
         $messages = [
             'active' => "تم تفعيل العميل لمدة {$months} شهر بنجاح",
             'banned' => 'تم حظر العميل بنجاح',
@@ -509,6 +517,165 @@ class AdminController extends Controller
     public function settings()
     {
         return view('admin.settings');
+    }
+
+    /**
+     * Send FCM notification when client status changes
+     */
+    private function sendStatusChangeNotification(string $firebaseUid, string $status, ?int $months = null)
+    {
+        try {
+            $notification = [];
+            $data = ['type' => ''];
+
+            switch ($status) {
+                case 'active':
+                    $notification = [
+                        'title' => 'تم تفعيل اشتراكك ✅',
+                        'body' => $months ? "مبروك! تم تفعيل اشتراكك لمدة {$months} شهر" : 'مبروك! تم تفعيل اشتراكك بنجاح'
+                    ];
+                    $data = [
+                        'type' => 'subscription_activated',
+                        'status' => 'active',
+                    ];
+                    if ($months) {
+                        $data['months'] = (string) $months;
+                    }
+                    break;
+
+                case 'banned':
+                    $notification = [
+                        'title' => 'حسابك محظور 🚫',
+                        'body' => 'تم حظر حسابك، يرجى التواصل مع الدعم'
+                    ];
+                    $data = [
+                        'type' => 'account_banned',
+                        'status' => 'banned',
+                    ];
+                    break;
+
+                case 'expired':
+                    $notification = [
+                        'title' => 'انتهى اشتراكك ❌',
+                        'body' => 'اشتراكك انتهى، يرجى التجديد'
+                    ];
+                    $data = [
+                        'type' => 'subscription_expired',
+                        'status' => 'expired',
+                    ];
+                    break;
+
+                case 'pending':
+                    $notification = [
+                        'title' => 'حسابك قيد المراجعة ⏳',
+                        'body' => 'سيتم تفعيله قريباً'
+                    ];
+                    $data = [
+                        'type' => 'account_pending',
+                        'status' => 'pending',
+                    ];
+                    break;
+            }
+
+            if (!empty($notification) && !empty($data['type'])) {
+                $this->notificationService->sendToUser($firebaseUid, $notification, $data);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error sending status change notification: ' . $e->getMessage(), [
+                'firebase_uid' => $firebaseUid,
+                'status' => $status,
+            ]);
+        }
+    }
+
+    /**
+     * Show notifications page
+     */
+    public function notifications()
+    {
+        return view('admin.notifications');
+    }
+
+    /**
+     * Send notification from admin panel
+     */
+    public function sendNotificationFromPanel(Request $request)
+    {
+        $request->validate([
+            'type' => 'required|in:single,multiple,all',
+            'user_id' => 'required_if:type,single|string',
+            'user_ids' => 'required_if:type,multiple|array',
+            'notification_title' => 'required|string|max:255',
+            'notification_body' => 'required|string|max:1000',
+            'notification_type' => 'required|in:overdue_debt,debt_due_soon,low_stock,subscription_activated,subscription_expired,subscription_expiring_soon,account_banned,account_pending,general',
+            'data' => 'nullable|string',
+            'filter_status' => 'nullable|in:pending,active,banned,expired',
+            'filter_is_active' => 'nullable|boolean',
+        ]);
+
+        try {
+            $notification = [
+                'title' => $request->notification_title,
+                'body' => $request->notification_body,
+            ];
+
+            $data = [
+                'type' => $request->notification_type,
+            ];
+
+            // Parse additional data if provided
+            if ($request->filled('data')) {
+                $additionalData = json_decode($request->data, true);
+                if (is_array($additionalData)) {
+                    $data = array_merge($data, $additionalData);
+                }
+            }
+
+            $result = null;
+
+            switch ($request->type) {
+                case 'single':
+                    $result = $this->notificationService->sendToUser($request->user_id, $notification, $data);
+                    break;
+
+                case 'multiple':
+                    $result = $this->notificationService->sendToMultiple($request->user_ids, $notification, $data);
+                    break;
+
+                case 'all':
+                    $filter = [];
+                    if ($request->filled('filter_status')) {
+                        $filter['status'] = $request->filter_status;
+                    }
+                    if ($request->has('filter_is_active')) {
+                        $filter['is_active'] = (bool) $request->filter_is_active;
+                    }
+                    $result = $this->notificationService->sendToAll($notification, $data, $filter);
+                    break;
+            }
+
+            if ($result && $result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'تم إرسال الإشعار بنجاح',
+                    'data' => [
+                        'sent' => $result['sent'] ?? 0,
+                        'failed' => $result['failed'] ?? 0,
+                    ]
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => $result['message'] ?? 'فشل إرسال الإشعار',
+                ], 400);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error sending notification from panel: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء إرسال الإشعار: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }
 

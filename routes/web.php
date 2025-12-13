@@ -34,6 +34,10 @@ Route::middleware(['admin'])->prefix('admin')->name('admin.')->group(function ()
     Route::get('/clients/{firebaseUid}', [AdminController::class, 'getClient'])->name('clients.get');
     Route::put('/clients/{firebaseUid}', [AdminController::class, 'updateClient'])->name('clients.update');
     Route::put('/clients/{firebaseUid}/status', [AdminController::class, 'updateClientStatus'])->name('clients.updateStatus');
+
+    // Notifications routes
+    Route::get('/notifications', [AdminController::class, 'notifications'])->name('notifications');
+    Route::post('/notifications/send', [AdminController::class, 'sendNotificationFromPanel'])->name('notifications.send');
 });
 
 // Template demo routes (keep for template pages)

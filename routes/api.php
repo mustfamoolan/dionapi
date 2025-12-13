@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\NotificationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -13,4 +14,9 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// API routes removed - clients and products are now managed via Firebase
+// Notification API routes (Admin only)
+Route::middleware(['auth:sanctum', 'api.admin'])->prefix('notifications')->group(function () {
+    Route::post('/send-to-user', [NotificationController::class, 'sendToUser']);
+    Route::post('/send-to-multiple', [NotificationController::class, 'sendToMultiple']);
+    Route::post('/send-to-all', [NotificationController::class, 'sendToAll']);
+});

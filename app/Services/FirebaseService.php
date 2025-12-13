@@ -13,12 +13,16 @@ class FirebaseService
     protected $accessToken;
     protected $baseUrl;
     protected $usersCollection;
+    protected $debtsCollection;
+    protected $productsCollection;
 
     public function __construct()
     {
         $credentialsPath = config('firebase.credentials');
         $this->projectId = config('firebase.project_id');
         $this->usersCollection = config('firebase.collections.users');
+        $this->debtsCollection = config('firebase.collections.debts', 'debts');
+        $this->productsCollection = config('firebase.collections.products', 'products');
         $this->baseUrl = "https://firestore.googleapis.com/v1/projects/{$this->projectId}/databases/(default)/documents";
 
         // Load credentials
@@ -422,12 +426,73 @@ class FirebaseService
             'provider_id' => $data['provider_id'] ?? null,
             'status' => $data['status'] ?? 'pending',
             'is_active' => $data['is_active'] ?? false,
+            'fcm_token' => $data['fcm_token'] ?? null,
+            'fcm_tokens' => $data['fcm_tokens'] ?? null,
             'activation_expires_at' => $this->convertTimestamp($data['activation_expires_at'] ?? null),
             'last_status_change_at' => $this->convertTimestamp($data['last_status_change_at'] ?? null),
             'last_login_at' => $this->convertTimestamp($data['last_login_at'] ?? null),
             'created_at' => $this->convertTimestamp($data['created_at'] ?? null),
             'updated_at' => $this->convertTimestamp($data['updated_at'] ?? null),
         ];
+    }
+
+    /**
+     * Get FCM tokens for a client
+     */
+    public function getClientFCMTokens(string $firebaseUid): array
+    {
+        $client = $this->getClient($firebaseUid);
+        
+        if (!$client) {
+            return [];
+        }
+
+        $tokens = [];
+
+        // Check for fcm_token (single token)
+        if (isset($client['fcm_token']) && !empty($client['fcm_token'])) {
+            $tokens[] = $client['fcm_token'];
+        }
+
+        // Check for fcm_tokens (array of tokens)
+        if (isset($client['fcm_tokens']) && is_array($client['fcm_tokens'])) {
+            $tokens = array_merge($tokens, array_filter($client['fcm_tokens']));
+        }
+
+        // Remove duplicates
+        return array_unique($tokens);
+    }
+
+    /**
+     * Get clients by filter
+     */
+    public function getClientsByFilter(array $filter = []): array
+    {
+        $clients = $this->getAllClients();
+        
+        if (empty($filter)) {
+            return $clients;
+        }
+
+        $filtered = [];
+
+        foreach ($clients as $client) {
+            $match = true;
+
+            if (isset($filter['status']) && $client['status'] !== $filter['status']) {
+                $match = false;
+            }
+
+            if (isset($filter['is_active']) && $client['is_active'] !== $filter['is_active']) {
+                $match = false;
+            }
+
+            if ($match) {
+                $filtered[] = $client;
+            }
+        }
+
+        return $filtered;
     }
 
     /**
@@ -482,5 +547,129 @@ class FirebaseService
         }
 
         return null;
+    }
+
+    /**
+     * Get debts from Firestore with optional filter
+     */
+    public function getDebts(array $filter = []): array
+    {
+        try {
+            $endpoint = "/{$this->debtsCollection}";
+            $response = $this->makeRequest('GET', $endpoint);
+
+            $debts = [];
+
+            if (isset($response['documents'])) {
+                foreach ($response['documents'] as $document) {
+                    $documentId = basename($document['name']);
+                    $fields = [];
+
+                    if (isset($document['fields'])) {
+                        foreach ($document['fields'] as $key => $value) {
+                            $fields[$key] = $this->fromFirestoreValue($value);
+                        }
+                    }
+
+                    $fields['id'] = $documentId;
+
+                    // Apply filters
+                    $include = true;
+                    if (!empty($filter)) {
+                        if (isset($filter['isFullyPaid']) && ($fields['isFullyPaid'] ?? false) !== $filter['isFullyPaid']) {
+                            $include = false;
+                        }
+                        if (isset($filter['clientUid']) && ($fields['clientUid'] ?? null) !== $filter['clientUid']) {
+                            $include = false;
+                        }
+                        if (isset($filter['dueDateBefore'])) {
+                            $dueDate = $fields['dueDate'] ?? null;
+                            if ($dueDate instanceof \DateTime) {
+                                $dueDate = $dueDate->getTimestamp();
+                            }
+                            $beforeDate = $filter['dueDateBefore'] instanceof \DateTime 
+                                ? $filter['dueDateBefore']->getTimestamp() 
+                                : strtotime($filter['dueDateBefore']);
+                            if ($dueDate >= $beforeDate) {
+                                $include = false;
+                            }
+                        }
+                        if (isset($filter['dueDateAfter'])) {
+                            $dueDate = $fields['dueDate'] ?? null;
+                            if ($dueDate instanceof \DateTime) {
+                                $dueDate = $dueDate->getTimestamp();
+                            }
+                            $afterDate = $filter['dueDateAfter'] instanceof \DateTime 
+                                ? $filter['dueDateAfter']->getTimestamp() 
+                                : strtotime($filter['dueDateAfter']);
+                            if ($dueDate < $afterDate) {
+                                $include = false;
+                            }
+                        }
+                    }
+
+                    if ($include) {
+                        $debts[] = $fields;
+                    }
+                }
+            }
+
+            return $debts;
+        } catch (\Exception $e) {
+            Log::error('Error fetching debts from Firestore: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get products from Firestore with optional filter
+     */
+    public function getProducts(array $filter = []): array
+    {
+        try {
+            $endpoint = "/{$this->productsCollection}";
+            $response = $this->makeRequest('GET', $endpoint);
+
+            $products = [];
+
+            if (isset($response['documents'])) {
+                foreach ($response['documents'] as $document) {
+                    $documentId = basename($document['name']);
+                    $fields = [];
+
+                    if (isset($document['fields'])) {
+                        foreach ($document['fields'] as $key => $value) {
+                            $fields[$key] = $this->fromFirestoreValue($value);
+                        }
+                    }
+
+                    $fields['id'] = $documentId;
+
+                    // Apply filters
+                    $include = true;
+                    if (!empty($filter)) {
+                        if (isset($filter['clientUid']) && ($fields['clientUid'] ?? null) !== $filter['clientUid']) {
+                            $include = false;
+                        }
+                        if (isset($filter['lowStockOnly'])) {
+                            $remaining = $fields['remainingQuantity'] ?? 0;
+                            $minimum = $fields['minQuantity'] ?? 0;
+                            if ($remaining > $minimum || $remaining <= 0) {
+                                $include = false;
+                            }
+                        }
+                    }
+
+                    if ($include) {
+                        $products[] = $fields;
+                    }
+                }
+            }
+
+            return $products;
+        } catch (\Exception $e) {
+            Log::error('Error fetching products from Firestore: ' . $e->getMessage());
+            return [];
+        }
     }
 }

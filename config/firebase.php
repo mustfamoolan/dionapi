@@ -31,6 +31,8 @@ return [
     */
     'collections' => [
         'users' => 'users',
+        'debts' => 'debts',
+        'products' => 'products',
     ],
 
     /*
@@ -42,5 +44,15 @@ return [
     |
     */
     'use_rest_api' => env('FIREBASE_USE_REST_API', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Firebase Cloud Messaging (FCM)
+    |--------------------------------------------------------------------------
+    |
+    | FCM Server Key for sending push notifications.
+    |
+    */
+    'fcm_server_key' => env('FCM_SERVER_KEY'),
 ];
 
