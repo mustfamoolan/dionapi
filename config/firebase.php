@@ -30,7 +30,8 @@ return [
     |
     */
     'collections' => [
-        'users' => 'clients',
+        'users' => 'users',
+        'clients' => 'clients',
         'debts' => 'debts',
         'products' => 'products',
     ],

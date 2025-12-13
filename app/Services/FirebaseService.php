@@ -13,6 +13,7 @@ class FirebaseService
     protected $accessToken;
     protected $baseUrl;
     protected $usersCollection;
+    protected $clientsCollection;
     protected $debtsCollection;
     protected $productsCollection;
 
@@ -21,6 +22,7 @@ class FirebaseService
         $credentialsPath = config('firebase.credentials');
         $this->projectId = config('firebase.project_id');
         $this->usersCollection = config('firebase.collections.users');
+        $this->clientsCollection = config('firebase.collections.clients', 'clients');
         $this->debtsCollection = config('firebase.collections.debts', 'debts');
         $this->productsCollection = config('firebase.collections.products', 'products');
         $this->baseUrl = "https://firestore.googleapis.com/v1/projects/{$this->projectId}/databases/(default)/documents";
@@ -437,30 +439,77 @@ class FirebaseService
     }
 
     /**
-     * Get FCM tokens for a client
+     * Get FCM tokens for a client from clients collection
      */
     public function getClientFCMTokens(string $firebaseUid): array
     {
-        $client = $this->getClient($firebaseUid);
-        
-        if (!$client) {
-            return [];
+        try {
+            // Try to get from clients collection first
+            $endpoint = "/{$this->clientsCollection}/{$firebaseUid}";
+            $response = $this->makeRequest('GET', $endpoint);
+
+            $tokens = [];
+
+            if (isset($response['fields'])) {
+                // Check for fcm_token (single token)
+                if (isset($response['fields']['fcm_token'])) {
+                    $fcmToken = $this->fromFirestoreValue($response['fields']['fcm_token']);
+                    if (!empty($fcmToken)) {
+                        $tokens[] = $fcmToken;
+                    }
+                }
+
+                // Check for fcm_tokens (array of tokens)
+                if (isset($response['fields']['fcm_tokens'])) {
+                    $fcmTokens = $this->fromFirestoreValue($response['fields']['fcm_tokens']);
+                    if (is_array($fcmTokens)) {
+                        $tokens = array_merge($tokens, array_filter($fcmTokens));
+                    }
+                }
+            }
+
+            // If not found in clients collection, try users collection
+            if (empty($tokens)) {
+                $client = $this->getClient($firebaseUid);
+                
+                if ($client) {
+                    // Check for fcm_token (single token)
+                    if (isset($client['fcm_token']) && !empty($client['fcm_token'])) {
+                        $tokens[] = $client['fcm_token'];
+                    }
+
+                    // Check for fcm_tokens (array of tokens)
+                    if (isset($client['fcm_tokens']) && is_array($client['fcm_tokens'])) {
+                        $tokens = array_merge($tokens, array_filter($client['fcm_tokens']));
+                    }
+                }
+            }
+
+            // Remove duplicates
+            return array_unique($tokens);
+        } catch (\Exception $e) {
+            Log::error('Error fetching FCM tokens: ' . $e->getMessage());
+            // Fallback to users collection
+            $client = $this->getClient($firebaseUid);
+            
+            if (!$client) {
+                return [];
+            }
+
+            $tokens = [];
+
+            // Check for fcm_token (single token)
+            if (isset($client['fcm_token']) && !empty($client['fcm_token'])) {
+                $tokens[] = $client['fcm_token'];
+            }
+
+            // Check for fcm_tokens (array of tokens)
+            if (isset($client['fcm_tokens']) && is_array($client['fcm_tokens'])) {
+                $tokens = array_merge($tokens, array_filter($client['fcm_tokens']));
+            }
+
+            return array_unique($tokens);
         }
-
-        $tokens = [];
-
-        // Check for fcm_token (single token)
-        if (isset($client['fcm_token']) && !empty($client['fcm_token'])) {
-            $tokens[] = $client['fcm_token'];
-        }
-
-        // Check for fcm_tokens (array of tokens)
-        if (isset($client['fcm_tokens']) && is_array($client['fcm_tokens'])) {
-            $tokens = array_merge($tokens, array_filter($client['fcm_tokens']));
-        }
-
-        // Remove duplicates
-        return array_unique($tokens);
     }
 
     /**
