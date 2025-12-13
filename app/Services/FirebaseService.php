@@ -13,7 +13,6 @@ class FirebaseService
     protected $accessToken;
     protected $baseUrl;
     protected $usersCollection;
-    protected $clientsCollection;
     protected $debtsCollection;
     protected $productsCollection;
 
@@ -22,7 +21,6 @@ class FirebaseService
         $credentialsPath = config('firebase.credentials');
         $this->projectId = config('firebase.project_id');
         $this->usersCollection = config('firebase.collections.users');
-        $this->clientsCollection = config('firebase.collections.clients', 'clients');
         $this->debtsCollection = config('firebase.collections.debts', 'debts');
         $this->productsCollection = config('firebase.collections.products', 'products');
         $this->baseUrl = "https://firestore.googleapis.com/v1/projects/{$this->projectId}/databases/(default)/documents";
@@ -226,26 +224,81 @@ class FirebaseService
     public function getAllClients(): array
     {
         try {
-            $endpoint = "/{$this->usersCollection}";
-            $response = $this->makeRequest('GET', $endpoint);
+            Log::info('Starting getAllClients', [
+                'collection' => $this->usersCollection,
+                'endpoint' => "/{$this->usersCollection}",
+            ]);
 
             $clients = [];
+            $endpoint = "/{$this->usersCollection}";
+            $pageToken = null;
+            $pageCount = 0;
 
-            if (isset($response['documents'])) {
-                foreach ($response['documents'] as $document) {
-                    $documentId = basename($document['name']);
-                    $fields = [];
+            do {
+                $pageCount++;
+                $requestUrl = $endpoint;
+                
+                // Add pageToken if we have one (for pagination)
+                if ($pageToken) {
+                    $requestUrl .= '?pageToken=' . urlencode($pageToken);
+                }
 
-                    if (isset($document['fields'])) {
-                        foreach ($document['fields'] as $key => $value) {
-                            $fields[$key] = $this->fromFirestoreValue($value);
+                Log::info('Fetching clients page', [
+                    'page' => $pageCount,
+                    'endpoint' => $requestUrl,
+                    'has_page_token' => !empty($pageToken),
+                ]);
+
+                $response = $this->makeRequest('GET', $requestUrl);
+
+                Log::info('Firestore response received', [
+                    'page' => $pageCount,
+                    'has_documents' => isset($response['documents']),
+                    'documents_count' => isset($response['documents']) ? count($response['documents']) : 0,
+                    'has_next_page_token' => isset($response['nextPageToken']),
+                    'response_keys' => array_keys($response),
+                ]);
+
+                if (isset($response['documents'])) {
+                    foreach ($response['documents'] as $document) {
+                        try {
+                            $documentId = basename($document['name']);
+                            $fields = [];
+
+                            if (isset($document['fields'])) {
+                                foreach ($document['fields'] as $key => $value) {
+                                    $fields[$key] = $this->fromFirestoreValue($value);
+                                }
+                            }
+
+                            $fields['firebase_uid'] = $documentId;
+                            $clients[] = $this->formatClientData($fields);
+                        } catch (\Exception $e) {
+                            Log::error('Error processing document', [
+                                'document_name' => $document['name'] ?? 'unknown',
+                                'error' => $e->getMessage(),
+                            ]);
                         }
                     }
-
-                    $fields['firebase_uid'] = $documentId;
-                    $clients[] = $this->formatClientData($fields);
+                } else {
+                    Log::warning('No documents in Firestore response', [
+                        'response' => $response,
+                    ]);
                 }
-            }
+
+                // Check if there's a next page
+                $pageToken = $response['nextPageToken'] ?? null;
+                
+                if ($pageToken) {
+                    Log::info('More pages available', ['next_page_token' => substr($pageToken, 0, 20) . '...']);
+                }
+
+            } while ($pageToken && $pageCount < 100); // Limit to 100 pages for safety
+
+            Log::info('Completed getAllClients', [
+                'total_clients' => count($clients),
+                'total_pages' => $pageCount,
+            ]);
 
             // Sort by created_at descending
             usort($clients, function ($a, $b) {
@@ -262,7 +315,11 @@ class FirebaseService
 
             return $clients;
         } catch (\Exception $e) {
-            Log::error('Error fetching clients from Firestore: ' . $e->getMessage());
+            Log::error('Error fetching clients from Firestore', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'collection' => $this->usersCollection,
+            ]);
             return [];
         }
     }
@@ -439,57 +496,11 @@ class FirebaseService
     }
 
     /**
-     * Get FCM tokens for a client from clients collection
+     * Get FCM tokens for a client from users collection
      */
     public function getClientFCMTokens(string $firebaseUid): array
     {
         try {
-            // Try to get from clients collection first
-            $endpoint = "/{$this->clientsCollection}/{$firebaseUid}";
-            $response = $this->makeRequest('GET', $endpoint);
-
-            $tokens = [];
-
-            if (isset($response['fields'])) {
-                // Check for fcm_token (single token)
-                if (isset($response['fields']['fcm_token'])) {
-                    $fcmToken = $this->fromFirestoreValue($response['fields']['fcm_token']);
-                    if (!empty($fcmToken)) {
-                        $tokens[] = $fcmToken;
-                    }
-                }
-
-                // Check for fcm_tokens (array of tokens)
-                if (isset($response['fields']['fcm_tokens'])) {
-                    $fcmTokens = $this->fromFirestoreValue($response['fields']['fcm_tokens']);
-                    if (is_array($fcmTokens)) {
-                        $tokens = array_merge($tokens, array_filter($fcmTokens));
-                    }
-                }
-            }
-
-            // If not found in clients collection, try users collection
-            if (empty($tokens)) {
-                $client = $this->getClient($firebaseUid);
-                
-                if ($client) {
-                    // Check for fcm_token (single token)
-                    if (isset($client['fcm_token']) && !empty($client['fcm_token'])) {
-                        $tokens[] = $client['fcm_token'];
-                    }
-
-                    // Check for fcm_tokens (array of tokens)
-                    if (isset($client['fcm_tokens']) && is_array($client['fcm_tokens'])) {
-                        $tokens = array_merge($tokens, array_filter($client['fcm_tokens']));
-                    }
-                }
-            }
-
-            // Remove duplicates
-            return array_unique($tokens);
-        } catch (\Exception $e) {
-            Log::error('Error fetching FCM tokens: ' . $e->getMessage());
-            // Fallback to users collection
             $client = $this->getClient($firebaseUid);
             
             if (!$client) {
@@ -508,7 +519,11 @@ class FirebaseService
                 $tokens = array_merge($tokens, array_filter($client['fcm_tokens']));
             }
 
+            // Remove duplicates
             return array_unique($tokens);
+        } catch (\Exception $e) {
+            Log::error('Error fetching FCM tokens: ' . $e->getMessage());
+            return [];
         }
     }
 

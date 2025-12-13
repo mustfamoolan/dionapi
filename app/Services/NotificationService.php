@@ -20,29 +20,11 @@ class NotificationService
 
     /**
      * Get FCM tokens for a user from Firestore
+     * Uses FirebaseService's getClientFCMTokens() method directly for better efficiency
      */
     protected function getFCMTokens(string $firebaseUid): array
     {
-        $client = $this->firebaseService->getClient($firebaseUid);
-        
-        if (!$client) {
-            return [];
-        }
-
-        $tokens = [];
-
-        // Check for fcm_token (single token)
-        if (isset($client['fcm_token']) && !empty($client['fcm_token'])) {
-            $tokens[] = $client['fcm_token'];
-        }
-
-        // Check for fcm_tokens (array of tokens)
-        if (isset($client['fcm_tokens']) && is_array($client['fcm_tokens'])) {
-            $tokens = array_merge($tokens, array_filter($client['fcm_tokens']));
-        }
-
-        // Remove duplicates
-        return array_unique($tokens);
+        return $this->firebaseService->getClientFCMTokens($firebaseUid);
     }
 
     /**
@@ -283,22 +265,46 @@ class NotificationService
     public function sendToMultiple(array $firebaseUids, array $notification, array $data = []): array
     {
         $allTokens = [];
+        $usersWithTokens = [];
+        $usersWithoutTokens = [];
 
         foreach ($firebaseUids as $firebaseUid) {
             $tokens = $this->getFCMTokens($firebaseUid);
-            $allTokens = array_merge($allTokens, $tokens);
+            if (!empty($tokens)) {
+                $allTokens = array_merge($allTokens, $tokens);
+                $usersWithTokens[] = $firebaseUid;
+            } else {
+                $usersWithoutTokens[] = $firebaseUid;
+                Log::info('User has no FCM tokens', ['firebase_uid' => $firebaseUid]);
+            }
         }
 
         if (empty($allTokens)) {
             return [
                 'success' => false,
-                'message' => 'لا توجد FCM tokens للمستخدمين المحددين',
+                'message' => 'لا توجد FCM tokens لأي من المستخدمين المحددين',
                 'sent' => 0,
                 'failed' => 0,
+                'users_with_tokens' => 0,
+                'users_without_tokens' => count($usersWithoutTokens),
             ];
         }
 
-        return $this->sendFCM($allTokens, $notification, $data);
+        $result = $this->sendFCM($allTokens, $notification, $data);
+        
+        // Add additional info
+        $result['users_with_tokens'] = count($usersWithTokens);
+        $result['users_without_tokens'] = count($usersWithoutTokens);
+        
+        if (count($usersWithoutTokens) > 0) {
+            $result['message'] = sprintf(
+                'تم إرسال الإشعار لـ %d مستخدم (فشل %d مستخدم ليس لديهم tokens)',
+                count($usersWithTokens),
+                count($usersWithoutTokens)
+            );
+        }
+
+        return $result;
     }
 
     /**
@@ -306,28 +312,139 @@ class NotificationService
      */
     public function sendToAll(array $notification, array $data = [], array $filter = []): array
     {
-        // Use getClientsByFilter if filter is provided, otherwise getAllClients
-        $clients = !empty($filter) 
-            ? $this->firebaseService->getClientsByFilter($filter)
-            : $this->firebaseService->getAllClients();
-        
-        $allTokens = [];
+        try {
+            Log::info('Starting sendToAll', [
+                'filter' => $filter,
+                'notification_title' => $notification['title'] ?? '',
+            ]);
 
-        foreach ($clients as $client) {
-            $tokens = $this->getFCMTokens($client['firebase_uid']);
-            $allTokens = array_merge($allTokens, $tokens);
-        }
+            // Use getClientsByFilter if filter is provided, otherwise getAllClients
+            $clients = !empty($filter) 
+                ? $this->firebaseService->getClientsByFilter($filter)
+                : $this->firebaseService->getAllClients();
+            
+            Log::info('Fetched clients for sendToAll', [
+                'total_clients' => count($clients),
+                'has_filter' => !empty($filter),
+            ]);
 
-        if (empty($allTokens)) {
+            if (empty($clients)) {
+                Log::warning('No clients found for sendToAll', ['filter' => $filter]);
+                return [
+                    'success' => false,
+                    'message' => 'لا توجد مستخدمين للرسالة',
+                    'sent' => 0,
+                    'failed' => 0,
+                    'users_with_tokens' => 0,
+                    'users_without_tokens' => 0,
+                    'total_users' => 0,
+                ];
+            }
+            
+            $allTokens = [];
+            $usersWithTokens = [];
+            $usersWithoutTokens = [];
+
+            foreach ($clients as $client) {
+                $firebaseUid = $client['firebase_uid'] ?? null;
+                if (!$firebaseUid) {
+                    Log::warning('Client missing firebase_uid', ['client' => $client]);
+                    continue;
+                }
+                
+                try {
+                    $tokens = $this->getFCMTokens($firebaseUid);
+                    if (!empty($tokens)) {
+                        $allTokens = array_merge($allTokens, $tokens);
+                        $usersWithTokens[] = $firebaseUid;
+                        Log::debug('User has FCM tokens', [
+                            'firebase_uid' => $firebaseUid,
+                            'tokens_count' => count($tokens),
+                        ]);
+                    } else {
+                        $usersWithoutTokens[] = $firebaseUid;
+                        Log::debug('User has no FCM tokens', ['firebase_uid' => $firebaseUid]);
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Error getting FCM tokens for user', [
+                        'firebase_uid' => $firebaseUid,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $usersWithoutTokens[] = $firebaseUid;
+                }
+            }
+
+            Log::info('Collected tokens for sendToAll', [
+                'users_with_tokens' => count($usersWithTokens),
+                'users_without_tokens' => count($usersWithoutTokens),
+                'total_tokens' => count($allTokens),
+            ]);
+
+            if (empty($allTokens)) {
+                Log::warning('No FCM tokens found for any user', [
+                    'total_users' => count($clients),
+                    'users_without_tokens' => count($usersWithoutTokens),
+                ]);
+                return [
+                    'success' => false,
+                    'message' => 'لا توجد FCM tokens لأي من المستخدمين',
+                    'sent' => 0,
+                    'failed' => 0,
+                    'users_with_tokens' => 0,
+                    'users_without_tokens' => count($usersWithoutTokens),
+                    'total_users' => count($clients),
+                ];
+            }
+
+            Log::info('Sending FCM notifications', [
+                'total_tokens' => count($allTokens),
+                'notification_title' => $notification['title'] ?? '',
+            ]);
+
+            $result = $this->sendFCM($allTokens, $notification, $data);
+            
+            // Add additional info
+            $result['users_with_tokens'] = count($usersWithTokens);
+            $result['users_without_tokens'] = count($usersWithoutTokens);
+            $result['total_users'] = count($clients);
+            
+            if (count($usersWithoutTokens) > 0) {
+                $result['message'] = sprintf(
+                    'تم إرسال الإشعار لـ %d مستخدم من أصل %d (فشل %d مستخدم ليس لديهم tokens)',
+                    count($usersWithTokens),
+                    count($clients),
+                    count($usersWithoutTokens)
+                );
+            } else {
+                $result['message'] = sprintf(
+                    'تم إرسال الإشعار لجميع المستخدمين (%d مستخدم)',
+                    count($usersWithTokens)
+                );
+            }
+
+            Log::info('Completed sendToAll', [
+                'sent' => $result['sent'] ?? 0,
+                'failed' => $result['failed'] ?? 0,
+                'users_with_tokens' => count($usersWithTokens),
+                'users_without_tokens' => count($usersWithoutTokens),
+            ]);
+
+            return $result;
+        } catch (\Exception $e) {
+            Log::error('Error in sendToAll', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
             return [
                 'success' => false,
-                'message' => 'لا توجد FCM tokens للمستخدمين',
+                'message' => 'حدث خطأ أثناء إرسال الإشعارات: ' . $e->getMessage(),
                 'sent' => 0,
                 'failed' => 0,
+                'users_with_tokens' => 0,
+                'users_without_tokens' => 0,
+                'total_users' => 0,
             ];
         }
-
-        return $this->sendFCM($allTokens, $notification, $data);
     }
 }
 

@@ -610,6 +610,68 @@ class AdminController extends Controller
     }
 
     /**
+     * Get clients list for dropdown (simple format)
+     */
+    public function getClientsList(Request $request)
+    {
+        try {
+            $clients = $this->firebaseService->getAllClients();
+            
+            $list = array_map(function ($client) {
+                return [
+                    'firebase_uid' => $client['firebase_uid'],
+                    'name' => $client['name'] ?? 'بدون اسم',
+                    'email' => $client['email'] ?? '',
+                ];
+            }, $clients);
+            
+            return response()->json([
+                'success' => true,
+                'data' => $list,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching clients list: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب قائمة المستخدمين',
+                'data' => [],
+            ], 500);
+        }
+    }
+
+    /**
+     * Get clients count for filter
+     */
+    public function getClientsCount(Request $request)
+    {
+        try {
+            $filter = [];
+            if ($request->filled('filter_status')) {
+                $filter['status'] = $request->filter_status;
+            }
+            // Only add is_active filter if it's explicitly set (not empty)
+            if ($request->filled('filter_is_active')) {
+                $filter['is_active'] = (bool) $request->filter_is_active;
+            }
+            
+            $clients = !empty($filter) 
+                ? $this->firebaseService->getClientsByFilter($filter)
+                : $this->firebaseService->getAllClients();
+            
+            return response()->json([
+                'success' => true,
+                'count' => count($clients),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error fetching clients count: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'count' => 0,
+            ], 500);
+        }
+    }
+
+    /**
      * Show notifications page
      */
     public function notifications()
@@ -668,7 +730,8 @@ class AdminController extends Controller
                     if ($request->filled('filter_status')) {
                         $filter['status'] = $request->filter_status;
                     }
-                    if ($request->has('filter_is_active')) {
+                    // Only add is_active filter if it's explicitly set (not empty)
+                    if ($request->filled('filter_is_active')) {
                         $filter['is_active'] = (bool) $request->filter_is_active;
                     }
                     $result = $this->notificationService->sendToAll($notification, $data, $filter);
@@ -678,16 +741,27 @@ class AdminController extends Controller
             if ($result && $result['success']) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'تم إرسال الإشعار بنجاح',
+                    'message' => $result['message'] ?? 'تم إرسال الإشعار بنجاح',
                     'data' => [
                         'sent' => $result['sent'] ?? 0,
                         'failed' => $result['failed'] ?? 0,
+                        'users_with_tokens' => $result['users_with_tokens'] ?? 0,
+                        'users_without_tokens' => $result['users_without_tokens'] ?? 0,
+                        'total_users' => $result['total_users'] ?? 0,
                     ]
                 ]);
             } else {
+                // Return detailed error information
                 return response()->json([
                     'success' => false,
                     'message' => $result['message'] ?? 'فشل إرسال الإشعار',
+                    'data' => [
+                        'sent' => $result['sent'] ?? 0,
+                        'failed' => $result['failed'] ?? 0,
+                        'users_with_tokens' => $result['users_with_tokens'] ?? 0,
+                        'users_without_tokens' => $result['users_without_tokens'] ?? 0,
+                        'total_users' => $result['total_users'] ?? 0,
+                    ]
                 ], 400);
             }
         } catch (\Exception $e) {

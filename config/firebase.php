@@ -31,7 +31,6 @@ return [
     */
     'collections' => [
         'users' => 'users',
-        'clients' => 'clients',
         'debts' => 'debts',
         'products' => 'products',
     ],
